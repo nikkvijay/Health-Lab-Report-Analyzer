@@ -7,18 +7,43 @@ yarn-error.log*
 pnpm-debug.log*
 lerna-debug.log*
 
-node_modules
-dist
-dist-ssr
-*.local
+# Dependency directories
+node_modules/
 
-# Editor directories and files
-.vscode/*
+# Production builds
+dist/
+dist-ssr/
+build/
+
+# Vite cache
+.vite/
+
+# Local env files (⚠️ NEVER COMMIT THESE)
+.env*
+!.env.example
+
+# Editor directories and settings
+.vscode/
 !.vscode/extensions.json
-.idea
+.idea/
 .DS_Store
-*.suo
-*.ntvs*
-*.njsproj
-*.sln
-*.sw?
+
+# OS generated files
+Thumbs.db
+ehthumbs.db
+Icon?
+.Spotlight-V100
+.Trashes
+
+# TypeScript cache
+*.tsbuildinfo
+
+# Optional: SvelteKit / Vite SSR
+.svelte-kit/
+
+# Optional: React Native
+android/
+ios/
+
+# Optional: Mac/Linux specific
+*.swp
