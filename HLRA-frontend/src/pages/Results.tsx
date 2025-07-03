@@ -1,6 +1,6 @@
 import React from "react";
 import HealthDataTable from "../components/DataTable/HealthDataTable";
-import { useHealthData } from "../context/HealthDataContext";
+import { useHealthData } from "../contexts/HealthDataContext";
 import { FileText, Calendar, TrendingUp, AlertTriangle } from "lucide-react";
 import { Link } from "react-router-dom";
 

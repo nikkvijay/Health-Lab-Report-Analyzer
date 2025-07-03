@@ -1,6 +1,6 @@
 import React, { useState, useMemo } from "react";
 import { ChevronDown, ChevronUp, Search, FileText } from "lucide-react";
-import { useHealthData } from "../../context/HealthDataContext";
+import { useHealthData } from "../../contexts/HealthDataContext";
 import StatusBadge from "./StatusBadge";
 import TableFilters from "./TableFilters";
 
@@ -8,21 +8,21 @@ type SortField = "name" | "value" | "status";
 type SortDirection = "asc" | "desc";
 
 const HealthDataTable = () => {
-  const { state } = useHealthData();
+  // ✅ Fixed: Destructure currentReport and filters directly from context
+  const { currentReport, filters } = useHealthData();
   const [sortField, setSortField] = useState<SortField>("name");
   const [sortDirection, setSortDirection] = useState<SortDirection>("asc");
 
   const filteredAndSortedData = useMemo(() => {
-    if (!state.currentReport) return [];
+    if (!currentReport) return [];
 
-    let filtered = state.currentReport.parameters.filter((param) => {
+    let filtered = currentReport.parameters.filter((param) => {
       const matchesSearch = param.name
         .toLowerCase()
-        .includes(state.filters.search.toLowerCase());
-      const matchesStatus =
-        !state.filters.status || param.status === state.filters.status;
+        .includes(filters.search.toLowerCase());
+      const matchesStatus = !filters.status || param.status === filters.status;
       const matchesCategory =
-        !state.filters.category || param.category === state.filters.category;
+        !filters.category || param.category === filters.category;
 
       return matchesSearch && matchesStatus && matchesCategory;
     });
@@ -42,7 +42,7 @@ const HealthDataTable = () => {
       const comparison = aValue < bValue ? -1 : aValue > bValue ? 1 : 0;
       return sortDirection === "asc" ? comparison : -comparison;
     });
-  }, [state.currentReport, state.filters, sortField, sortDirection]);
+  }, [currentReport, filters, sortField, sortDirection]);
 
   const handleSort = (field: SortField) => {
     if (sortField === field) {
@@ -64,7 +64,7 @@ const HealthDataTable = () => {
       <ChevronDown className="h-4 w-4 opacity-30" />
     );
 
-  if (!state.currentReport) {
+  if (!currentReport) {
     return (
       <div className="text-center py-12">
         <FileText className="h-12 w-12 text-gray-400 mx-auto mb-4" />

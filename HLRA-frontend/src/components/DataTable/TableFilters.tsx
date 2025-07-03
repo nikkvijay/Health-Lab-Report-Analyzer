@@ -1,14 +1,14 @@
 import React from "react";
 import { Search, Filter } from "lucide-react";
-import { useHealthData } from "../../context/HealthDataContext";
+import { useHealthData } from "../../contexts/HealthDataContext";
 
 const TableFilters = () => {
-  const { state, dispatch } = useHealthData();
+  const { filters, setFilters } = useHealthData();
 
   const handleFilterChange = (key: string, value: string) => {
-    dispatch({
-      type: "SET_FILTERS",
-      payload: { [key]: value },
+    setFilters({
+      ...filters,
+      [key]: value,
     });
   };
 
@@ -20,7 +20,7 @@ const TableFilters = () => {
           <input
             type="text"
             placeholder="Search parameters..."
-            value={state.filters.search}
+            value={filters.search}
             onChange={(e) => handleFilterChange("search", e.target.value)}
             className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
           />
@@ -28,7 +28,7 @@ const TableFilters = () => {
 
         <div className="flex gap-4">
           <select
-            value={state.filters.status}
+            value={filters.status}
             onChange={(e) => handleFilterChange("status", e.target.value)}
             className="px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
           >
@@ -40,7 +40,7 @@ const TableFilters = () => {
           </select>
 
           <select
-            value={state.filters.category}
+            value={filters.category}
             onChange={(e) => handleFilterChange("category", e.target.value)}
             className="px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
           >
@@ -58,3 +58,4 @@ const TableFilters = () => {
 };
 
 export default TableFilters;
+

@@ -1,6 +1,6 @@
 import React, { useEffect } from "react";
 import { CheckCircle, Loader, FileText } from "lucide-react";
-import { useHealthData } from "../../context/HealthDataContext";
+import { useHealthData } from "../../contexts/HealthDataContext";
 import { useNavigate } from "react-router-dom";
 
 const UploadProgress = () => {

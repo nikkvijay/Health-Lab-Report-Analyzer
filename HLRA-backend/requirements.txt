@@ -1,0 +1,17 @@
+fastapi>=0.68.0
+uvicorn[standard]
+python-multipart
+pydantic
+pydantic-settings
+pytesseract
+PyPDF2
+Pillow
+python-dotenv
+pytest
+httpx
+python-jose[cryptography]
+passlib[bcrypt]
+google-auth
+google-auth-oauthlib
+pdf2image
+email-validator

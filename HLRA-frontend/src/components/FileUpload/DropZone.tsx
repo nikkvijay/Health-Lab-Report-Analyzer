@@ -1,7 +1,7 @@
 import React, { useCallback } from "react";
 import { useDropzone } from "react-dropzone";
 import { Upload, FileText, AlertCircle } from "lucide-react";
-import { useHealthData } from "../../context/HealthDataContext";
+import { useHealthData } from "../../contexts/HealthDataContext";
 
 const DropZone = () => {
   const { uploadState, setUploadState } = useHealthData();

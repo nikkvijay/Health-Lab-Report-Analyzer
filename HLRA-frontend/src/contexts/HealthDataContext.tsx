@@ -1,13 +1,21 @@
-import { createContext, useContext, useState } from "react";
-import type { LabReport, FileUploadState } from "../types/health.types";
+import { createContext, useContext, useState, ReactNode } from "react";
+import type { LabReport, FileUploadState } from "../types/index";
+
+interface Filters {
+  search: string;
+  status: string;
+  category: string;
+}
 
 interface HealthDataContextType {
   reports: LabReport[];
   currentReport: LabReport | null;
   uploadState: FileUploadState;
+  filters: Filters;
   setReports: (reports: LabReport[]) => void;
   setCurrentReport: (report: LabReport | null) => void;
   setUploadState: (state: FileUploadState) => void;
+  setFilters: (filters: Filters) => void;
 }
 
 const initialUploadState: FileUploadState = {
@@ -17,32 +25,30 @@ const initialUploadState: FileUploadState = {
   error: null,
 };
 
-const HealthDataContext = createContext<HealthDataContextType>({
-  reports: [],
-  currentReport: null,
-  uploadState: initialUploadState,
-  setReports: () => {},
-  setCurrentReport: () => {},
-  setUploadState: () => {},
-});
+const initialFilters: Filters = {
+  search: "",
+  status: "",
+  category: "",
+};
 
-export const HealthDataProvider = ({
-  children,
-}: {
-  children: React.ReactNode;
-}) => {
+const HealthDataContext = createContext<HealthDataContextType | null>(null);
+
+export const HealthDataProvider = ({ children }: { children: ReactNode }) => {
   const [reports, setReports] = useState<LabReport[]>([]);
   const [currentReport, setCurrentReport] = useState<LabReport | null>(null);
   const [uploadState, setUploadState] =
     useState<FileUploadState>(initialUploadState);
+  const [filters, setFilters] = useState<Filters>(initialFilters);
 
-  const value = {
+  const value: HealthDataContextType = {
     reports,
     currentReport,
     uploadState,
+    filters,
     setReports,
     setCurrentReport,
     setUploadState,
+    setFilters,
   };
 
   return (

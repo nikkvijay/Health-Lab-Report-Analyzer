@@ -1,7 +1,7 @@
 import React from "react";
 import DropZone from "../components/FileUpload/DropZone";
 import UploadProgress from "../components/FileUpload/UploadProgress";
-import { useHealthData } from "../context/HealthDataContext";
+import { useHealthData } from "../contexts/HealthDataContext";
 import { type FileUploadState } from "../types/health.types";
 
 const Upload = () => {
