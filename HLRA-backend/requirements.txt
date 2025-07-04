@@ -15,3 +15,5 @@ google-auth
 google-auth-oauthlib
 pdf2image
 email-validator
+aiofiles 
+pdfplumber 
