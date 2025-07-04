@@ -2,12 +2,12 @@
 import { LoginCredentials, SignupCredentials } from "@/types/auth.types";
 
 export const API_ENDPOINTS = {
-  LOGIN: "/auth/login",
-  SIGNUP: "/auth/signup",
-  GOOGLE_AUTH: "/auth/google",
-  GITHUB_AUTH: "/auth/github",
-  LOGOUT: "/auth/logout",
-  ME: "/auth/me",
+  LOGIN: "auth/login",
+  SIGNUP: "auth/signup",
+  GOOGLE_AUTH: "auth/google",
+  GITHUB_AUTH: "auth/github",
+  LOGOUT: "auth/logout",
+  ME: "auth/me",
 };
 
 export const authApi = {
