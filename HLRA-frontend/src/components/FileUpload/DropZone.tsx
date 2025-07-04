@@ -37,21 +37,21 @@ const DropZone = () => {
     let progress = 0;
     const interval = setInterval(() => {
       progress += 10;
-      setUploadState((prevState: typeof uploadState) => ({
+      setUploadState((prevState) => ({
         ...prevState,
         progress,
       }));
 
       if (progress >= 100) {
         clearInterval(interval);
-        setUploadState((prevState: typeof uploadState) => ({
+        setUploadState((prevState) => ({
           ...prevState,
           status: "processing",
         }));
 
         // Simulate processing
         setTimeout(() => {
-          setUploadState((prevState: typeof uploadState) => ({
+          setUploadState((prevState) => ({
             ...prevState,
             status: "complete",
           }));
