@@ -5,7 +5,8 @@ import os
 
 class Settings(BaseSettings):
     # JWT Configuration
-    secret_key: str = "fallback-secret-key-change-in-production"
+    secret_key: str = os.getenv("SECRET_KEY", "fallback-secret-key-change-in-production")
+    jwt_secret: str = os.getenv("JWT_SECRET", "fallback-jwt-secret-change-in-production")
     algorithm: str = "HS256"
     access_token_expire_minutes: int = 30
     
@@ -20,21 +21,29 @@ class Settings(BaseSettings):
     
     # API Configuration
     api_host: str = "0.0.0.0"
-    api_port: int = 8000
-    debug: bool = True
+    api_port: int = int(os.getenv("PORT", 8000))
+    debug: bool = os.getenv("DEBUG", "false").lower() == "true"
     
     # File Upload Configuration
     max_file_size: int = 10 * 1024 * 1024  # 10MB
-    upload_dir: str = "uploads"
+    upload_dir: str = os.getenv("UPLOAD_DIR", "/tmp/uploads")
     allowed_extensions: List[str] = [".pdf", ".jpg", ".jpeg", ".png"]
     
-    # CORS Configuration - Simple hardcoded list (no env parsing)
-    allowed_origins: List[str] = [
-        "http://localhost:3000",
-        "http://127.0.0.1:3000", 
-        "http://localhost:5173",
-        "http://127.0.0.1:5173"
-    ]
+    # CORS Configuration
+    def get_allowed_origins(self) -> List[str]:
+        cors_origins = os.getenv("CORS_ORIGINS", "")
+        if cors_origins:
+            return [origin.strip() for origin in cors_origins.split(",")]
+        return [
+            "http://localhost:3000",
+            "http://127.0.0.1:3000", 
+            "http://localhost:5173",
+            "http://127.0.0.1:5173"
+        ]
+    
+    @property
+    def allowed_origins(self) -> List[str]:
+        return self.get_allowed_origins()
     
     # OCR Configuration
     tesseract_path: str = ""
