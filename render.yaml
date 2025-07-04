@@ -1,0 +1,17 @@
+services:
+  - type: web
+    name: hlra-backend
+    env: docker
+    rootDir: HLRA-backend
+    dockerfilePath: ./Dockerfile
+    envVars:
+      - key: SECRET_KEY
+        generateValue: true
+      - key: JWT_SECRET
+        generateValue: true
+      - key: DATABASE_URL
+        value: postgresql://user:password@localhost:5432/dbname
+      - key: CORS_ORIGINS
+        value: https://your-frontend-domain.vercel.app
+      - key: UPLOAD_DIR
+        value: /app/uploads
