@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from "react";
+import { useState, useMemo } from "react";
 import { ChevronDown, ChevronUp, Search, FileText } from "lucide-react";
 import { useHealthData } from "../../contexts/HealthDataContext";
 import StatusBadge from "./StatusBadge";

@@ -1,6 +1,6 @@
-import React, { useCallback } from "react";
+import { useCallback } from "react";
 import { useDropzone } from "react-dropzone";
-import { Upload, FileText, AlertCircle } from "lucide-react";
+import { Upload, AlertCircle } from "lucide-react";
 import { useHealthData } from "../../contexts/HealthDataContext";
 
 const DropZone = () => {
@@ -37,21 +37,21 @@ const DropZone = () => {
     let progress = 0;
     const interval = setInterval(() => {
       progress += 10;
-      setUploadState((prevState) => ({
+      setUploadState((prevState: typeof uploadState) => ({
         ...prevState,
         progress,
       }));
 
       if (progress >= 100) {
         clearInterval(interval);
-        setUploadState((prevState) => ({
+        setUploadState((prevState: typeof uploadState) => ({
           ...prevState,
           status: "processing",
         }));
 
         // Simulate processing
         setTimeout(() => {
-          setUploadState((prevState) => ({
+          setUploadState((prevState: typeof uploadState) => ({
             ...prevState,
             status: "complete",
           }));

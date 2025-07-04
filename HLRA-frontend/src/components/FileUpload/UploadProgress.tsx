@@ -1,4 +1,4 @@
-import React, { useEffect } from "react";
+import { useEffect } from "react";
 import { CheckCircle, Loader, FileText } from "lucide-react";
 import { useHealthData } from "../../contexts/HealthDataContext";
 import { useNavigate } from "react-router-dom";
@@ -62,7 +62,7 @@ const UploadProgress = () => {
         ],
       };
 
-      setReports((prevReports) => [...prevReports, mockReport]);
+      setReports((prevReports: any) => [...prevReports, mockReport]);
       setCurrentReport(mockReport); // Set the current report
 
       setTimeout(() => {

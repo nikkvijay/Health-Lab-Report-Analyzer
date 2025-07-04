@@ -1,5 +1,4 @@
 // src/components/Layout/Header.tsx
-import React from "react";
 import { Activity, Bell, LogOut } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useAuth } from "@/contexts/AuthContext";
@@ -11,8 +10,8 @@ const Header = () => {
 
   const handleLogout = async () => {
     try {
-      const success = await logout();
-      if (success) {
+      await logout();                                               
+          if (true) { 
         navigate("/auth", { replace: true });
       }
     } catch (error) {
