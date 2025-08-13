@@ -8,6 +8,8 @@ PyPDF2
 Pillow
 python-dotenv
 pytest
+pytest-asyncio
+pytest-cov
 httpx
 pdf2image
 email-validator
@@ -15,8 +17,7 @@ aiofiles
 pdfplumber
 motor
 pymongo
-pytest
-pytest-asyncio
-pytest-cov
-httpx
 bcrypt
+python-jose[cryptography]
+passlib[bcrypt]
+gunicorn
