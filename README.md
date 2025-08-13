@@ -8,14 +8,22 @@
 [![TypeScript](https://img.shields.io/badge/TypeScript-5.8+-blue.svg)](https://typescriptlang.org)
 [![License](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 
+[![Frontend Deploy](https://img.shields.io/badge/Frontend-Live%20on%20Vercel-brightgreen.svg)](https://health-lab-report-analyzer.vercel.app)
+[![Backend Deploy](https://img.shields.io/badge/Backend-Live%20on%20Render-brightgreen.svg)](https://health-lab-report-analyzer.onrender.com)
+[![API Docs](https://img.shields.io/badge/API%20Docs-Swagger%20UI-orange.svg)](https://health-lab-report-analyzer.onrender.com/docs)
+
 A comprehensive web application for analyzing and managing health laboratory reports with OCR capabilities, family profile management, and data visualization.
 
-[Features](#features) • [Demo](#demo) • [Installation](#installation) • [API Documentation](#api-documentation) • [Contributing](#contributing)
+**🚀 Live Demo:** [https://health-lab-report-analyzer.vercel.app](https://health-lab-report-analyzer.vercel.app)  
+**📚 API Docs:** [https://health-lab-report-analyzer.onrender.com/docs](https://health-lab-report-analyzer.onrender.com/docs)
+
+[Features](#features) • [Live Demo](#live-demo) • [Installation](#installation) • [API Documentation](#api-documentation) • [Contributing](#contributing)
 
 </div>
 
 ## 📋 Table of Contents
 
+- [Live Demo](#live-demo)
 - [Features](#features)
 - [Technology Stack](#technology-stack)
 - [Project Structure](#project-structure)
@@ -26,6 +34,37 @@ A comprehensive web application for analyzing and managing health laboratory rep
 - [Testing](#testing)
 - [Contributing](#contributing)
 - [License](#license)
+
+## 🚀 Live Demo
+
+### Frontend Application
+**URL:** [https://health-lab-report-analyzer.vercel.app](https://health-lab-report-analyzer.vercel.app)
+
+Experience the full HLRA application with:
+- User registration and authentication
+- Family profile management
+- Health report upload and OCR processing
+- Data visualization and trends
+- Report sharing capabilities
+
+### Backend API
+**URL:** [https://health-lab-report-analyzer.onrender.com](https://health-lab-report-analyzer.onrender.com)  
+**Interactive Docs:** [https://health-lab-report-analyzer.onrender.com/docs](https://health-lab-report-analyzer.onrender.com/docs)
+
+Explore the complete API documentation with:
+- All available endpoints
+- Request/response schemas
+- Interactive testing interface
+- Authentication examples
+
+### Quick Test
+1. **Visit:** [https://health-lab-report-analyzer.vercel.app](https://health-lab-report-analyzer.vercel.app)
+2. **Register** a new account or login
+3. **Create** a family profile
+4. **Upload** a sample health report (PDF/image)
+5. **View** the processed data and insights
+
+> **Note:** The backend may take a few seconds to wake up on first request (Render free tier)
 
 ## ✨ Features
 
@@ -176,6 +215,13 @@ Health-Lab-Report-Analyzer/
    ```
 
 ### Access the Application
+
+#### 🌐 Live Production (Deployed)
+- **Frontend**: https://health-lab-report-analyzer.vercel.app
+- **Backend API**: https://health-lab-report-analyzer.onrender.com
+- **API Documentation**: https://health-lab-report-analyzer.onrender.com/docs
+
+#### 💻 Local Development
 - **Frontend**: http://localhost:5173
 - **Backend API**: http://localhost:8000
 - **API Documentation**: http://localhost:8000/docs
@@ -247,20 +293,35 @@ For complete API documentation, visit `/docs` endpoint when running the backend.
 
 ## 🚀 Deployment
 
-### Quick Deploy
+### 🌐 Live Deployment
 
-#### Backend (Render)
-1. Push code to GitHub
-2. Create new Web Service on Render
-3. Connect repository, select `HLRA-backend` directory
-4. Set environment variables (see `DEPLOYMENT.md`)
-5. Deploy
+**Frontend (Vercel):** [https://health-lab-report-analyzer.vercel.app](https://health-lab-report-analyzer.vercel.app)  
+**Backend (Render):** [https://health-lab-report-analyzer.onrender.com](https://health-lab-report-analyzer.onrender.com)  
+**API Documentation:** [https://health-lab-report-analyzer.onrender.com/docs](https://health-lab-report-analyzer.onrender.com/docs)
 
-#### Frontend (Vercel)
-1. Create new project on Vercel
-2. Import repository, select `HLRA-frontend` directory
-3. Set `VITE_API_BASE_URL` environment variable
-4. Deploy
+### Quick Deploy Guide
+
+#### Backend (Render) ✅ DEPLOYED
+1. ✅ Push code to GitHub
+2. ✅ Create new Web Service on Render
+3. ✅ Connect repository, select `HLRA-backend` directory
+4. ✅ Set environment variables
+5. ✅ Deploy successful
+
+**Current Status:** Live at [https://health-lab-report-analyzer.onrender.com](https://health-lab-report-analyzer.onrender.com)
+
+#### Frontend (Vercel) ✅ DEPLOYED
+1. ✅ Create new project on Vercel
+2. ✅ Import repository, select `HLRA-frontend` directory
+3. ✅ Set `VITE_API_BASE_URL` environment variable
+4. ✅ Deploy successful
+
+**Current Status:** Live at [https://health-lab-report-analyzer.vercel.app](https://health-lab-report-analyzer.vercel.app)
+
+### Environment Configuration
+- **Backend CORS:** Updated to allow frontend domain
+- **Frontend API URL:** Points to Render backend
+- **Database:** MongoDB Atlas integration active
 
 For detailed deployment instructions, see [DEPLOYMENT.md](./DEPLOYMENT.md).
 
