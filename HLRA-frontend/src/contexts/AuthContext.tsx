@@ -1,305 +1,352 @@
-// src/contexts/AuthContext.tsx
-import {
-  createContext,
-  useContext,
-  useState,
-  useEffect,
-  useCallback,
-} from "react";
-import { useNavigate } from "react-router-dom";
-import type {
-  User,
-  AuthState,
-  LoginCredentials,
-  SignupCredentials,
-} from "@/types/auth.types";
-import { API_ENDPOINTS } from "@/api/auth";
+import React, { createContext, useContext, useEffect, useState, useRef } from 'react';
+import Cookies from 'js-cookie';
+import { User, AuthTokens, AuthState, LoginCredentials, RegisterCredentials } from '../types';
+import { authAPI } from '../api/auth';
+import { toast } from 'sonner';
+import { authCircuitBreaker } from '../utils/authGuard';
+import { ErrorHandler, handleApiError, isNetworkError } from '../utils/errorHandler';
 
 interface AuthContextType extends AuthState {
-  login: (provider: "google" | "github") => Promise<void>;
-  loginWithEmail: (credentials: LoginCredentials) => Promise<void>;
-  logout: () => Promise<void>;
-  signup: (name: string, email: string, password: string) => Promise<void>;
-  handleOAuthCallback: (
-    token: string,
-    provider: "google" | "github"
-  ) => Promise<void>;
+  login: (credentials: LoginCredentials) => Promise<void>;
+  register: (credentials: RegisterCredentials) => Promise<void>;
+  logout: () => void;
+  refreshToken: () => Promise<boolean>;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
-export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
+export const useAuth = () => {
+  const context = useContext(AuthContext);
+  if (context === undefined) {
+    throw new Error('useAuth must be used within an AuthProvider');
+  }
+  return context;
+};
+
+interface AuthProviderProps {
+  children: React.ReactNode;
+}
+
+export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
   const [authState, setAuthState] = useState<AuthState>({
     user: null,
-    isLoading: false,
+    tokens: null,
     isAuthenticated: false,
-    error: null,
+    isLoading: true,
   });
-  const navigate = useNavigate();
 
-  useEffect(() => {
-    checkAuthStatus();
-  }, []);
+  // Circuit breaker to prevent infinite loops
+  const refreshAttempts = useRef(0);
+  const lastRefreshAttempt = useRef<number>(0);
+  const circuitBroken = useRef(false);
+  const MAX_REFRESH_ATTEMPTS = 3;
+  const REFRESH_COOLDOWN = 5000; // 5 seconds
+  const CIRCUIT_RESET_TIME = 30000; // 30 seconds
 
-  const checkAuthStatus = async () => {
-    try {
-      const token = localStorage.getItem("auth_token");
-      const userData = localStorage.getItem("user_data");
-
-      console.log("Checking auth status:", {
-        tokenExists: !!token,
-        userDataExists: !!userData,
+  const setTokens = (tokens: AuthTokens | null) => {
+    if (tokens) {
+      // Set cookies with secure configuration
+      const isProduction = import.meta.env.PROD;
+      const cookieOptions = {
+        sameSite: 'Strict' as const,
+        secure: isProduction || window.location.protocol === 'https:',
+        httpOnly: false, // Need access from JS for API calls
+      };
+      
+      Cookies.set('access_token', tokens.access_token, { 
+        ...cookieOptions,
+        expires: 1, // 1 day
       });
-
-      if (token && userData) {
-        setAuthState({
-          user: JSON.parse(userData),
-          isLoading: false,
-          isAuthenticated: true,
-          error: null,
-        });
-      } else {
-        setAuthState((prev) => ({ ...prev, isLoading: false }));
-      }
-    } catch (error) {
-      console.error("Auth status check failed:", error);
-      setAuthState({
-        user: null,
-        isLoading: false,
-        isAuthenticated: false,
-        error: "Failed to verify authentication",
+      Cookies.set('refresh_token', tokens.refresh_token, { 
+        ...cookieOptions,
+        expires: 7, // 7 days
       });
+      authAPI.setAuthToken(tokens.access_token);
+      
+    } else {
+      Cookies.remove('access_token');
+      Cookies.remove('refresh_token');
+      authAPI.removeAuthToken();
     }
+    
+    setAuthState(prev => ({ ...prev, tokens }));
   };
 
-  const login = async (provider: "google" | "github") => {
+  const login = async (credentials: LoginCredentials) => {
     try {
-      console.log(`Initiating ${provider} login`);
-      setAuthState((prev) => ({ ...prev, isLoading: true, error: null }));
-
-      if (provider === "google") {
-        const response = await fetch(
-          `${import.meta.env.VITE_API_URL}${API_ENDPOINTS.GOOGLE_AUTH}`
-        );
-        const data = await response.json();
-        console.log("Google auth response:", data);
-        window.location.href = data.auth_url;
-      } else if (provider === "github") {
-        const response = await fetch(
-          `${import.meta.env.VITE_API_URL}${API_ENDPOINTS.GITHUB_AUTH}`
-        );
-        const data = await response.json();
-        console.log("GitHub auth response:", data);
-        window.location.href = data.auth_url;
-      }
-    } catch (error: any) {
-      console.error(`${provider} login error:`, error);
-      setAuthState((prev) => ({
-        ...prev,
-        isLoading: false,
-        error: error.message || `Failed to initiate ${provider} login`,
-      }));
-    }
-  };
-
-  const handleOAuthCallback = useCallback(
-    async (token: string, provider: "google" | "github") => {
-      console.log(`Handling ${provider} OAuth callback with token:`, token);
-
-      if (!token) {
-        throw new Error("No token provided");
-      }
-
-      try {
-        setAuthState((prev) => ({ ...prev, isLoading: true, error: null }));
-
-        // Store token immediately
-        localStorage.setItem("auth_token", token);
-
-        // Fetch user profile
-        const response = await fetch(
-          `${import.meta.env.VITE_API_URL}/auth/me`,
-          {
-            headers: {
-              Authorization: `Bearer ${token}`,
-            },
-            credentials: "include", // Important for CORS
-          }
-        );
-
-        if (!response.ok) {
-          throw new Error("Failed to fetch user profile");
-        }
-
-        const userData = await response.json();
-
-        // Store user data and update state
-        localStorage.setItem("user_data", JSON.stringify(userData));
-
-        // Update state only once
-        setAuthState({
-          user: userData,
-          isLoading: false,
-          isAuthenticated: true,
-          error: null,
-        });
-      } catch (error: any) {
-        // Clear any stored data on error
-        localStorage.removeItem("auth_token");
-        localStorage.removeItem("user_data");
-
-        setAuthState({
-          user: null,
-          isLoading: false,
-          isAuthenticated: false,
-          error: error.message || "Authentication failed",
-        });
-
-        throw error;
-      }
-    },
-    []
-  );
-
-  const loginWithEmail = async (credentials: LoginCredentials) => {
-    try {
-      console.log("Sending login request:", {
-        url: `${import.meta.env.VITE_API_URL}${API_ENDPOINTS.LOGIN}`,
-        credentials,
-      });
-      setAuthState((prev) => ({ ...prev, isLoading: true, error: null }));
-
-      const response = await fetch(
-        `${import.meta.env.VITE_API_URL}${API_ENDPOINTS.LOGIN}`,
-        {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(credentials),
-        }
-      );
-
-      const data = await response.json();
-      console.log("Login response:", { status: response.status, data });
-
-      if (!response.ok) {
-        throw new Error(data.detail || "Login failed");
-      }
-
-      localStorage.setItem("auth_token", data.access_token);
-      localStorage.setItem("user_data", JSON.stringify(data.user));
-
+      setAuthState(prev => ({ ...prev, isLoading: true }));
+      const response = await authAPI.login(credentials);
+      const tokens = response.data;
+      
+      setTokens(tokens);
+      
+      const userResponse = await authAPI.getCurrentUser();
+      const user = userResponse.data;
+      
       setAuthState({
-        user: data.user,
-        isLoading: false,
+        user,
+        tokens,
         isAuthenticated: true,
-        error: null,
-      });
-    } catch (error: any) {
-      console.error("Login error:", error.message, error);
-      setAuthState((prev) => ({
-        ...prev,
         isLoading: false,
-        error: error.message || "Invalid email or password",
-      }));
+      });
+      
+      toast.success('Login successful!');
+    } catch (error: any) {
+      setAuthState(prev => ({ ...prev, isLoading: false }));
+      const standardError = handleApiError(error, 'Login', { rethrow: true });
+      throw standardError;
     }
   };
 
-  const signup = async (name: string, email: string, password: string) => {
+  const register = async (credentials: RegisterCredentials) => {
     try {
-      console.log("Sending signup request:", { email, name });
-      setAuthState((prev) => ({ ...prev, isLoading: true, error: null }));
-
-      const response = await fetch(
-        `${import.meta.env.VITE_API_URL}${API_ENDPOINTS.SIGNUP}`,
-        {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ email, password, name }),
-        }
-      );
-
-      const data = await response.json();
-      console.log("Signup response:", { status: response.status, data });
-
-      if (!response.ok) {
-        throw new Error(data.detail || "Signup failed");
-      }
-
-      localStorage.setItem("auth_token", data.access_token);
-      localStorage.setItem("user_data", JSON.stringify(data.user));
-
-      setAuthState({
-        user: data.user,
-        isLoading: false,
-        isAuthenticated: true,
-        error: null,
+      setAuthState(prev => ({ ...prev, isLoading: true }));
+      await authAPI.register(credentials);
+      
+      // Auto-login after successful registration
+      await login({
+        email: credentials.email,
+        password: credentials.password,
       });
+      
+      toast.success('Registration successful!');
     } catch (error: any) {
-      console.error("Signup error:", error.message, error);
-      setAuthState((prev) => ({
-        ...prev,
-        isLoading: false,
-        error: error.message || "Signup failed",
-      }));
+      setAuthState(prev => ({ ...prev, isLoading: false }));
+      const standardError = handleApiError(error, 'Registration', { rethrow: true });
+      throw standardError;
     }
   };
 
   const logout = async () => {
     try {
-      setAuthState((prev) => ({ ...prev, isLoading: true, error: null }));
-      const token = localStorage.getItem("auth_token");
-
-      const response = await fetch(
-        `${import.meta.env.VITE_API_URL}/auth/logout`,
-        {
-          method: "POST",
-          headers: {
-            Authorization: `Bearer ${token}`,
-            "Content-Type": "application/json",
-          },
-        }
-      );
-
-      if (!response.ok) {
-        throw new Error("Logout failed");
-      }
-
-      localStorage.removeItem("auth_token");
-      localStorage.removeItem("user_data");
-
+      await authAPI.logout();
+    } catch (error) {
+      // Ignore logout errors
+    } finally {
+      clearAllAuthData();
       setAuthState({
         user: null,
-        isLoading: false,
+        tokens: null,
         isAuthenticated: false,
-        error: null,
-      });
-
-      navigate("/auth", { replace: true });
-    } catch (error: any) {
-      setAuthState((prev) => ({
-        ...prev,
         isLoading: false,
-        error: error.message || "Logout failed",
-      }));
+      });
+      
+      // Reset circuit breaker
+      refreshAttempts.current = 0;
+      circuitBroken.current = false;
+      
+      toast.success('Logged out successfully');
     }
   };
 
-  const value = {
-    ...authState,
-    login,
-    loginWithEmail,
-    logout,
-    signup,
-    handleOAuthCallback,
+  const refreshToken = async (): Promise<boolean> => {
+    // Global circuit breaker check
+    if (authCircuitBreaker.isBroken()) {
+      console.warn('🚫 Global auth circuit breaker active - blocking all auth attempts');
+      return false;
+    }
+    
+    const now = Date.now();
+    
+    // Local circuit breaker: if broken, check if we should reset
+    if (circuitBroken.current) {
+      if (now - lastRefreshAttempt.current > CIRCUIT_RESET_TIME) {
+        circuitBroken.current = false;
+        refreshAttempts.current = 0;
+      } else {
+        console.warn('🚫 Local circuit breaker active - blocking refresh attempts');
+        return false;
+      }
+    }
+    
+    // Check if we're in cooldown period
+    if (now - lastRefreshAttempt.current < REFRESH_COOLDOWN) {
+      console.warn('🚫 Refresh token cooldown active, skipping attempt');
+      return false;
+    }
+    
+    // Check if we've exceeded max attempts
+    if (refreshAttempts.current >= MAX_REFRESH_ATTEMPTS) {
+      console.error('🚨 CIRCUIT BREAKER TRIGGERED - Too many refresh failures');
+      circuitBroken.current = true;
+      setTokens(null);
+      setAuthState({
+        user: null,
+        tokens: null,
+        isAuthenticated: false,
+        isLoading: false,
+      });
+      toast.error('Authentication session expired. Please log in again.');
+      return false;
+    }
+    
+    try {
+      const refreshTokenValue = Cookies.get('refresh_token');
+      if (!refreshTokenValue) {
+        console.warn('No refresh token available - logging out');
+        await logout();
+        return false;
+      }
+
+      lastRefreshAttempt.current = now;
+      refreshAttempts.current += 1;
+      
+
+      const response = await authAPI.refreshToken(refreshTokenValue);
+      const tokens = response.data;
+      
+      setTokens(tokens);
+      
+      // Reset circuit breaker on success
+      refreshAttempts.current = 0;
+      circuitBroken.current = false;
+      return true;
+      
+    } catch (error: any) {
+      const standardError = ErrorHandler.classify(error);
+      console.warn(`❌ Token refresh failed (${refreshAttempts.current}/${MAX_REFRESH_ATTEMPTS}):`, ErrorHandler.getUserMessage(standardError));
+      
+      // If we've reached max attempts, break the circuit GLOBALLY
+      if (refreshAttempts.current >= MAX_REFRESH_ATTEMPTS) {
+        console.error('🚨 GLOBAL CIRCUIT BREAKER TRIGGERED - Max refresh attempts exceeded');
+        
+        // Break both local and global circuits
+        circuitBroken.current = true;
+        authCircuitBreaker.break();
+        
+        // Clear all auth data
+        clearAllAuthData();
+        setAuthState({
+          user: null,
+          tokens: null,
+          isAuthenticated: false,
+          isLoading: false,
+        });
+        
+        toast.error('Session expired. Please log in again.');
+      }
+      
+      return false;
+    }
   };
 
-  return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
-};
+  const clearAllAuthData = () => {
+    // Clear all cookies
+    Cookies.remove('access_token');
+    Cookies.remove('refresh_token');
+    
+    // Clear localStorage items that might interfere
+    try {
+      localStorage.removeItem('hlra_notifications');
+      localStorage.removeItem('form_persistence_new_profile');
+      localStorage.removeItem('form_persistence_edit_profile');
+      // Clear any other auth-related items
+      Object.keys(localStorage).forEach(key => {
+        if (key.includes('auth') || key.includes('token') || key.includes('user')) {
+          localStorage.removeItem(key);
+        }
+      });
+    } catch (e) {
+      console.warn('Error clearing localStorage:', e);
+    }
+    
+    // Clear API token
+    authAPI.removeAuthToken();
+  };
 
-export const useAuth = () => {
-  const context = useContext(AuthContext);
-  if (context === undefined) {
-    throw new Error("useAuth must be used within an AuthProvider");
-  }
-  return context;
+  const initializeAuth = async () => {
+    const accessToken = Cookies.get('access_token');
+    const refreshTokenCookie = Cookies.get('refresh_token');
+    
+    // If no tokens, clear everything to be safe
+    if (!accessToken || !refreshTokenCookie) {
+      clearAllAuthData();
+      setAuthState(prev => ({ ...prev, isLoading: false }));
+      return;
+    }
+
+    try {
+      authAPI.setAuthToken(accessToken);
+      const response = await authAPI.getCurrentUser();
+      const user = response.data;
+      
+      setAuthState({
+        user,
+        tokens: {
+          access_token: accessToken,
+          refresh_token: refreshTokenCookie,
+          token_type: 'bearer',
+          expires_in: 1800,
+        },
+        isAuthenticated: true,
+        isLoading: false,
+      });
+      
+      // Reset circuit breaker on successful init
+      refreshAttempts.current = 0;
+      circuitBroken.current = false;
+      
+    } catch (error: any) {
+      const standardError = ErrorHandler.classify(error);
+      
+      // Check if it's a network/server error  
+      if (isNetworkError(standardError)) {
+        // Backend is not available - create mock user for development
+        console.warn('Backend server not available, using mock authentication for development');
+        setAuthState({
+          user: {
+            id: 'mock-user-id',
+            full_name: 'Development User',
+            email: 'dev@example.com',
+            is_active: true,
+            created_at: new Date().toISOString(),
+          },
+          tokens: {
+            access_token: accessToken,
+            refresh_token: refreshTokenCookie,
+            token_type: 'bearer',
+            expires_in: 1800,
+          },
+          isAuthenticated: true,
+          isLoading: false,
+        });
+        return;
+      }
+
+      // Token is invalid - clear everything and force clean state
+      console.error('🚨 Authentication failed - clearing all auth data');
+      clearAllAuthData();
+      
+      setAuthState({
+        user: null,
+        tokens: null,
+        isAuthenticated: false,
+        isLoading: false,
+      });
+      
+      // Break the circuit immediately to prevent refresh loops
+      circuitBroken.current = true;
+      refreshAttempts.current = MAX_REFRESH_ATTEMPTS;
+      
+      toast.error('Your session has expired. Please log in again.');
+    }
+  };
+
+  useEffect(() => {
+    initializeAuth();
+  }, []);
+
+  const contextValue: AuthContextType = {
+    ...authState,
+    login,
+    register,
+    logout,
+    refreshToken,
+  };
+
+  return (
+    <AuthContext.Provider value={contextValue}>
+      {children}
+    </AuthContext.Provider>
+  );
 };

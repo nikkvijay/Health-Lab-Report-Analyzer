@@ -117,7 +117,7 @@ const UploadProgress = () => {
         )}
 
         {uploadState.status === "complete" && (
-          <div className="flex items-center space-x-2 text-green-600">
+          <div className="flex items-center space-x-2 text-blue-600">
             <CheckCircle className="h-5 w-5" />
             <span>Analysis complete! Redirecting to results...</span>
           </div>

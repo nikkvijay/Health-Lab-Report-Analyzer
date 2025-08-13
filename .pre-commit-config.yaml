@@ -1,0 +1,54 @@
+repos:
+  # Frontend hooks
+  - repo: local
+    hooks:
+      - id: frontend-lint
+        name: Frontend ESLint
+        entry: bash -c 'cd HLRA-frontend && npm run lint'
+        language: system
+        files: '^HLRA-frontend/.*\.(ts|tsx|js|jsx)$'
+        pass_filenames: false
+        
+      - id: frontend-typecheck
+        name: Frontend TypeScript Check
+        entry: bash -c 'cd HLRA-frontend && npx tsc --noEmit'
+        language: system
+        files: '^HLRA-frontend/.*\.(ts|tsx)$'
+        pass_filenames: false
+        
+      - id: frontend-tests
+        name: Frontend Tests
+        entry: bash -c 'cd HLRA-frontend && npm run test:run'
+        language: system
+        files: '^HLRA-frontend/.*\.(ts|tsx|js|jsx)$'
+        pass_filenames: false
+
+  # Backend hooks
+  - repo: local
+    hooks:
+      - id: backend-tests
+        name: Backend Tests
+        entry: bash -c 'cd HLRA-backend && source venv/bin/activate && python -m pytest tests/ -x --tb=short'
+        language: system
+        files: '^HLRA-backend/.*\.py$'
+        pass_filenames: false
+
+  # General hooks
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v4.4.0
+    hooks:
+      - id: trailing-whitespace
+      - id: end-of-file-fixer
+      - id: check-yaml
+      - id: check-json
+      - id: check-added-large-files
+        args: ['--maxkb=1000']
+      - id: check-merge-conflict
+
+  # Security
+  - repo: https://github.com/Yelp/detect-secrets
+    rev: v1.4.0
+    hooks:
+      - id: detect-secrets
+        args: ['--baseline', '.secrets.baseline']
+        exclude: package-lock.json

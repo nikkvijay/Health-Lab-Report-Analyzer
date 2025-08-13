@@ -1,63 +1,69 @@
-from datetime import datetime, timedelta
-from typing import Optional, Union
+from datetime import datetime, timedelta, timezone
+from typing import Any, Union, Optional
 from jose import JWTError, jwt
 from passlib.context import CryptContext
-from fastapi import HTTPException, status
+from pydantic import ValidationError
 from app.core.config import settings
 
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 
-class SecurityService:
-    def verify_password(self, plain_password: str, hashed_password: str) -> bool:
-        """Verify a password against its hash"""
-        return pwd_context.verify(plain_password, hashed_password)
+ALGORITHM = "HS256"
 
-    def get_password_hash(self, password: str) -> str:
-        """Hash a password"""
-        return pwd_context.hash(password)
-
-    def create_access_token(
-        self, 
-        data: dict, 
-        expires_delta: Optional[timedelta] = None
-    ) -> str:
-        """Create JWT access token"""
-        to_encode = data.copy()
-        if expires_delta:
-            expire = datetime.utcnow() + expires_delta
-        else:
-            expire = datetime.utcnow() + timedelta(
-                minutes=settings.access_token_expire_minutes
-            )
-        to_encode.update({"exp": expire})
-        encoded_jwt = jwt.encode(
-            to_encode, 
-            settings.secret_key, 
-            algorithm=settings.algorithm
+def create_access_token(
+    subject: Union[str, Any], expires_delta: timedelta = None
+) -> str:
+    if expires_delta:
+        expire = datetime.now(timezone.utc) + expires_delta
+    else:
+        expire = datetime.now(timezone.utc) + timedelta(
+            minutes=settings.ACCESS_TOKEN_EXPIRE_MINUTES
         )
-        return encoded_jwt
+    to_encode = {"exp": expire, "sub": str(subject)}
+    encoded_jwt = jwt.encode(to_encode, settings.SECRET_KEY, algorithm=ALGORITHM)
+    return encoded_jwt
 
-    def verify_token(self, token: str) -> str:
-        """Verify JWT token and return email"""
-        try:
-            payload = jwt.decode(
-                token, 
-                settings.secret_key, 
-                algorithms=[settings.algorithm]
-            )
-            email: str = payload.get("sub")
-            if email is None:
-                raise HTTPException(
-                    status_code=status.HTTP_401_UNAUTHORIZED,
-                    detail="Could not validate credentials",
-                    headers={"WWW-Authenticate": "Bearer"},
-                )
-            return email
-        except JWTError:
-            raise HTTPException(
-                status_code=status.HTTP_401_UNAUTHORIZED,
-                detail="Could not validate credentials",
-                headers={"WWW-Authenticate": "Bearer"},
-            )
+def create_refresh_token(
+    subject: Union[str, Any], expires_delta: timedelta = None
+) -> str:
+    if expires_delta:
+        expire = datetime.now(timezone.utc) + expires_delta
+    else:
+        expire = datetime.now(timezone.utc) + timedelta(
+            days=settings.REFRESH_TOKEN_EXPIRE_DAYS
+        )
+    to_encode = {"exp": expire, "sub": str(subject), "type": "refresh"}
+    encoded_jwt = jwt.encode(to_encode, settings.SECRET_KEY, algorithm=ALGORITHM)
+    return encoded_jwt
 
-security_service = SecurityService()
+def verify_password(plain_password: str, hashed_password: str) -> bool:
+    return pwd_context.verify(plain_password, hashed_password)
+
+def get_password_hash(password: str) -> str:
+    return pwd_context.hash(password)
+
+def verify_token(token: str) -> Optional[str]:
+    try:
+        payload = jwt.decode(
+            token, settings.SECRET_KEY, algorithms=[ALGORITHM]
+        )
+        token_data = payload.get("sub")
+        if token_data is None:
+            return None
+        return token_data
+    except (JWTError, ValidationError):
+        return None
+
+def verify_refresh_token(token: str) -> Optional[str]:
+    try:
+        payload = jwt.decode(
+            token, settings.SECRET_KEY, algorithms=[ALGORITHM]
+        )
+        token_type = payload.get("type")
+        if token_type != "refresh":
+            return None
+        token_data = payload.get("sub")
+        if token_data is None:
+            return None
+        return token_data
+    except (JWTError, ValidationError):
+        return None

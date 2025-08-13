@@ -1,24 +1,21 @@
-from pydantic import BaseModel
-from typing import Optional, List
 from datetime import datetime
-
+from pydantic import BaseModel
+from typing import Optional
 class FileUploadResponse(BaseModel):
-    file_id: str
-    filename: str
-    status: str
-    message: str
-    upload_date: datetime
+      id: str  # For frontend compatibility
+      file_id: str  # Keep for backward compatibility
+      filename: str
+      original_filename: str
+      status: str
+      message: str
+      upload_date: datetime
+      processing_status: str
+      parameters_count: int = 0
 
 class FileProcessingStatus(BaseModel):
-    file_id: str
-    status: str
-    progress: int  # 0-100
-    message: str
-    parameters_found: int = 0
-    error: Optional[str] = None
-
-class FileValidation(BaseModel):
-    is_valid: bool
-    file_type: str
-    file_size: int
-    errors: List[str] = []
+      file_id: str
+      status: str
+      progress: int
+      message: str
+      parameters_found: int
+      error: Optional[str] = None

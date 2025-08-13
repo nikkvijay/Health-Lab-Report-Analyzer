@@ -6,12 +6,10 @@ import { Home, FileText, Upload, Search, ArrowLeft } from "lucide-react";
 const NotFoundPage = () => {
   const handleGoHome = () => {
     // In your actual app, use: navigate('/') or router.push('/')
-    console.log("Navigate to home");
   };
 
   const handleGoBack = () => {
     // In your actual app, use: navigate(-1) or router.back()
-    console.log("Go back");
   };
 
   const quickActions = [
@@ -19,19 +17,19 @@ const NotFoundPage = () => {
       icon: Upload,
       title: "Upload Report",
       description: "Upload a new lab report for analysis",
-      action: () => console.log("Navigate to upload"),
+      
     },
     {
       icon: FileText,
       title: "View Reports",
       description: "Check your previous lab reports",
-      action: () => console.log("Navigate to reports"),
+      
     },
     {
       icon: Search,
       title: "Search",
       description: "Search through your health data",
-      action: () => console.log("Navigate to search"),
+      
     },
   ];
 
@@ -119,7 +117,7 @@ const NotFoundPage = () => {
             Still having trouble?{" "}
             <button
               className="text-blue-600 hover:text-blue-700 underline"
-              onClick={() => console.log("Contact support")}
+              
             >
               Contact our support team
             </button>{" "}

@@ -1,4 +1,4 @@
-fastapi>=0.68.0
+fastapi
 uvicorn[standard]
 python-multipart
 pydantic
@@ -9,11 +9,14 @@ Pillow
 python-dotenv
 pytest
 httpx
-python-jose[cryptography]
-passlib[bcrypt]
-google-auth
-google-auth-oauthlib
 pdf2image
 email-validator
-aiofiles 
-pdfplumber 
+aiofiles
+pdfplumber
+motor
+pymongo
+pytest
+pytest-asyncio
+pytest-cov
+httpx
+bcrypt

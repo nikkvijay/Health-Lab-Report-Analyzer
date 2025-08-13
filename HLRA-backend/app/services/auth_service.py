@@ -1,190 +1,145 @@
-# app/services/auth_service.py
-from typing import Optional, Dict, Any
-from datetime import datetime, timedelta
-import httpx
-from google.auth.transport import requests
-from google.oauth2 import id_token
+from datetime import datetime, timedelta, timezone
+from typing import Optional
+from fastapi import HTTPException, status
+from motor.motor_asyncio import AsyncIOMotorDatabase
+from app.core.security import verify_password, get_password_hash, create_access_token, create_refresh_token
+from app.models.user import User, UserCreate, UserInDB, UserLogin, UserUpdate, Token
 from app.core.config import settings
-from app.core.security import security_service
-from app.models.auth import User, UserInDB, AuthProvider
-from app.core.exceptions import AuthenticationError
-import uuid
-import logging
-
-# Setup logging
-logging.basicConfig(level=logging.INFO)
-logger = logging.getLogger(__name__)
-
-# In-memory storage for demo (replace with database in production)
-users_db: Dict[str, UserInDB] = {}
 
 class AuthService:
-    def __init__(self):
-        self.security = security_service
+    def __init__(self, db: AsyncIOMotorDatabase):
+        self.db = db
+        self.collection = db.users
 
-    async def create_user(self, email: str, password: str, name: str, provider: AuthProvider = AuthProvider.EMAIL) -> User:
-        """Create a new user"""
-        logger.info(f"Creating user: {email}")
-        if email in users_db:
-            logger.error(f"Email already registered: {email}")
-            raise AuthenticationError("Email already registered")
+    async def create_user(self, user_create: UserCreate) -> UserInDB:
+        # Check if user already exists
+        existing_user = await self.collection.find_one({"email": user_create.email})
+        if existing_user:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Email already registered"
+            )
+
+        # Create new user
+        hashed_password = get_password_hash(user_create.password)
+        user_data = User(
+            email=user_create.email,
+            full_name=user_create.full_name,
+            hashed_password=hashed_password
+        )
+
+        # Insert user to database
+        result = await self.collection.insert_one(user_data.dict())
+        if result.inserted_id:
+            user_data.id = str(result.inserted_id)
+            return UserInDB(**user_data.dict())
+        else:
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail="Failed to create user"
+            )
+
+    async def authenticate_user(self, user_login: UserLogin) -> Optional[UserInDB]:
+        user = await self.collection.find_one({"email": user_login.email})
+        if not user:
+            return None
         
-        hashed_password = self.security.get_password_hash(password) if password else ""
-        user_id = str(uuid.uuid4())
+        if not verify_password(user_login.password, user["hashed_password"]):
+            return None
         
-        user = UserInDB(
-            id=user_id,
-            email=email,
-            name=name,
-            hashed_password=hashed_password,
-            provider=provider,
-            created_at=datetime.utcnow(),
-            is_active=True
+        # Update last login
+        await self.collection.update_one(
+            {"_id": user["_id"]},
+            {"$set": {"last_login": datetime.utcnow()}}
         )
         
-        users_db[email] = user
-        logger.info(f"User created successfully: {email}")
-        return User(**user.dict())
+        user["id"] = str(user["_id"])
+        return UserInDB(**user)
 
-    async def authenticate_user(self, email: str, password: str) -> Optional[User]:
-        """Authenticate user with email and password"""
-        logger.info(f"Authenticating user: {email}")
-        user = users_db.get(email)
-        if not user:
-            logger.warning(f"User not found: {email}")
-            return None
-        if not self.security.verify_password(password, user.hashed_password):
-            logger.warning(f"Password verification failed for: {email}")
-            return None
-        logger.info(f"User authenticated successfully: {email}")
-        return User(**user.dict())
-
-    async def get_user_by_email(self, email: str) -> Optional[User]:
-        """Get user by email"""
-        logger.info(f"Fetching user by email: {email}")
-        user = users_db.get(email)
+    async def get_user_by_email(self, email: str) -> Optional[UserInDB]:
+        user = await self.collection.find_one({"email": email})
         if user:
-            return User(**user.dict())
-        logger.warning(f"User not found: {email}")
+            user["id"] = str(user["_id"])
+            return UserInDB(**user)
         return None
 
-    async def create_access_token(self, user: User) -> str:
-        """Create access token for user"""
-        logger.info(f"Creating access token for: {user.email}")
-        token_data = {"sub": user.email}
-        token = self.security.create_access_token(
-            data=token_data,
-            expires_delta=timedelta(minutes=settings.access_token_expire_minutes)
-        )
-        logger.info(f"Access token created for: {user.email}")
-        return token
+    async def get_user_by_id(self, user_id: str) -> Optional[UserInDB]:
+        from bson import ObjectId
+        try:
+            user = await self.collection.find_one({"_id": ObjectId(user_id)})
+            if user:
+                user["id"] = str(user["_id"])
+                return UserInDB(**user)
+        except Exception:
+            pass
+        return None
 
-    async def verify_google_token(self, code: str) -> Dict[str, Any]:
-        """Verify Google OAuth token and get user info"""
-        logger.info("Verifying Google OAuth token")
-        token_url = "https://oauth2.googleapis.com/token"
-        token_data = {
-            "client_id": settings.google_client_id,
-            "client_secret": settings.google_client_secret,
-            "code": code,
-            "grant_type": "authorization_code",
-            "redirect_uri": settings.google_redirect_uri,
-        }
+    def create_tokens(self, user: UserInDB) -> Token:
+        access_token_expires = timedelta(minutes=settings.ACCESS_TOKEN_EXPIRE_MINUTES)
+        refresh_token_expires = timedelta(days=settings.REFRESH_TOKEN_EXPIRE_DAYS)
         
-        async with httpx.AsyncClient() as client:
-            token_response = await client.post(token_url, data=token_data)
-            if token_response.status_code != 200:
-                logger.error(f"Failed to exchange code for token: {token_response.text}")
-                raise AuthenticationError(f"Failed to exchange code for token: {token_response.text}")
-            token_json = token_response.json()
+        access_token = create_access_token(
+            subject=user.email, expires_delta=access_token_expires
+        )
+        refresh_token = create_refresh_token(
+            subject=user.email, expires_delta=refresh_token_expires
+        )
+        
+        return Token(
+            access_token=access_token,
+            refresh_token=refresh_token,
+            expires_in=settings.ACCESS_TOKEN_EXPIRE_MINUTES * 60
+        )
+
+    async def refresh_access_token(self, refresh_token: str) -> Token:
+        from app.core.security import verify_refresh_token
+        
+        email = verify_refresh_token(refresh_token)
+        if not email:
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Invalid refresh token"
+            )
+        
+        user = await self.get_user_by_email(email)
+        if not user:
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="User not found"
+            )
+        
+        return self.create_tokens(user)
+
+    async def update_user(self, user_id: str, user_update: UserUpdate) -> Optional[UserInDB]:
+        """Update user profile information"""
+        from bson import ObjectId
         
         try:
-            id_info = id_token.verify_oauth2_token(
-                token_json["id_token"], 
-                requests.Request(), 
-                settings.google_client_id
-            )
-            logger.info(f"Google token verified for email: {id_info['email']}")
-            return {
-                "email": id_info["email"],
-                "name": id_info["name"],
-                "avatar": id_info.get("picture")
-            }
-        except ValueError as e:
-            logger.error(f"Invalid Google token: {str(e)}")
-            raise AuthenticationError(f"Invalid token: {str(e)}")
-
-    async def verify_github_token(self, code: str) -> Dict[str, Any]:
-        """Verify GitHub OAuth token and get user info"""
-        logger.info("Verifying GitHub OAuth token")
-        token_url = "https://github.com/login/oauth/access_token"
-        token_data = {
-            "client_id": settings.github_client_id,
-            "client_secret": settings.github_client_secret,
-            "code": code,
-        }
-        
-        headers = {"Accept": "application/json"}
-        
-        async with httpx.AsyncClient() as client:
-            token_response = await client.post(token_url, data=token_data, headers=headers)
-            if token_response.status_code != 200:
-                logger.error(f"Failed to exchange code for token: {token_response.text}")
-                raise AuthenticationError(f"Failed to exchange code for token: {token_response.text}")
+            # Create update data, only including non-None fields
+            update_data = {k: v for k, v in user_update.dict(exclude_unset=True).items() if v is not None}
             
-            token_json = token_response.json()
-            access_token = token_json.get("access_token")
-            if not access_token:
-                logger.error("No access token received from GitHub")
-                raise AuthenticationError("No access token received")
+            if not update_data:
+                # No fields to update
+                return await self.get_user_by_id(user_id)
             
-            user_response = await client.get(
-                "https://api.github.com/user",
-                headers={"Authorization": f"token {access_token}"}
+            # Add updated timestamp
+            update_data["updated_at"] = datetime.utcnow()
+            
+            # Update user in database
+            result = await self.collection.update_one(
+                {"_id": ObjectId(user_id)},
+                {"$set": update_data}
             )
             
-            if user_response.status_code != 200:
-                logger.error(f"Failed to get user info: {user_response.text}")
-                raise AuthenticationError(f"Failed to get user info from GitHub: {user_response.text}")
+            if result.modified_count > 0:
+                # Return updated user
+                return await self.get_user_by_id(user_id)
+            else:
+                # User not found or no changes made
+                return None
                 
-            user_data = user_response.json()
-            
-            email_response = await client.get(
-                "https://api.github.com/user/emails",
-                headers={"Authorization": f"token {access_token}"}
+        except Exception as e:
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail=f"Failed to update user: {str(e)}"
             )
-            
-            primary_email = user_data.get("email")
-            if not primary_email and email_response.status_code == 200:
-                emails = email_response.json()
-                for email_obj in emails:
-                    if email_obj.get("primary", False):
-                        primary_email = email_obj["email"]
-                        break
-            
-            logger.info(f"GitHub token verified for email: {primary_email}")
-            return {
-                "email": primary_email,
-                "name": user_data.get("name") or user_data.get("login"),
-                "avatar": user_data.get("avatar_url")
-            }
-
-    async def get_or_create_oauth_user(self, user_data: Dict[str, Any], provider: AuthProvider) -> User:
-        """Get existing OAuth user or create new one"""
-        email = user_data["email"]
-        logger.info(f"Checking/creating OAuth user: {email} ({provider})")
-        existing_user = await self.get_user_by_email(email)
-        
-        if existing_user:
-            logger.info(f"Existing OAuth user found: {email}")
-            return existing_user
-        
-        logger.info(f"Creating new OAuth user: {email}")
-        return await self.create_user(
-            email=email,
-            password="",  # No password for OAuth users
-            name=user_data["name"],
-            provider=provider
-        )
-
-auth_service = AuthService()

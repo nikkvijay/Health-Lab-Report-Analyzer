@@ -1,69 +1,66 @@
-// src/api/auth.ts
-import { LoginCredentials, SignupCredentials } from "@/types/auth.types";
+import axios from 'axios';
+import { LoginCredentials, RegisterCredentials, AuthTokens, User, UserUpdate } from '../types';
+import { API_BASE_URL } from '@/constant';
 
-export const API_ENDPOINTS = {
-  LOGIN: "auth/login",
-  SIGNUP: "auth/signup",
-  GOOGLE_AUTH: "auth/google",
-  GITHUB_AUTH: "auth/github",
-  LOGOUT: "auth/logout",
-  ME: "auth/me",
-};
+class AuthAPI {
+  private axiosInstance;
 
-export const authApi = {
-  login: async (credentials: LoginCredentials) => {
-    console.log("API login request:", credentials);
-    const response = await fetch(
-      `${import.meta.env.VITE_API_URL}${API_ENDPOINTS.LOGIN}`,
-      {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(credentials),
+  constructor() {
+    this.axiosInstance = axios.create({
+      baseURL: `${API_BASE_URL}/api/v1/auth`,
+      headers: {
+        'Content-Type': 'application/json',
+      },
+    });
+
+    // NOTE: Token refresh is now handled by AuthContext only
+    // This interceptor was causing duplicate refresh loops
+    this.axiosInstance.interceptors.response.use(
+      (response) => response,
+      (error) => {
+        // Just pass through errors - let AuthContext handle refresh
+        return Promise.reject(error);
       }
     );
-    const responseData = await response.json();
-    console.log("API login response:", {
-      status: response.status,
-      data: responseData,
+  }
+
+  setAuthToken(token: string) {
+    this.axiosInstance.defaults.headers.common['Authorization'] = `Bearer ${token}`;
+  }
+
+  removeAuthToken() {
+    delete this.axiosInstance.defaults.headers.common['Authorization'];
+  }
+
+  async login(credentials: LoginCredentials) {
+    return this.axiosInstance.post<AuthTokens>('/login', credentials);
+  }
+
+  async register(credentials: RegisterCredentials) {
+    return this.axiosInstance.post<User>('/register', credentials);
+  }
+
+  async logout() {
+    return this.axiosInstance.post('/logout');
+  }
+
+  async refreshToken(refreshToken: string) {
+    return this.axiosInstance.post<AuthTokens>('/refresh', {
+      refresh_token: refreshToken,
     });
-    if (!response.ok) {
-      throw new Error(responseData.detail || "Login failed");
-    }
-    return responseData;
-  },
+  }
 
-  signup: async (credentials: SignupCredentials) => {
-    console.log("API signup request:", credentials);
-    const response = await fetch(
-      `${import.meta.env.VITE_API_URL}${API_ENDPOINTS.SIGNUP}`,
-      {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(credentials),
-      }
-    );
-    const responseData = await response.json();
-    console.log("API signup response:", {
-      status: response.status,
-      data: responseData,
-    });
-    if (!response.ok) {
-      throw new Error(responseData.detail || "Signup failed");
-    }
-    return responseData;
-  },
+  async getCurrentUser() {
+    return this.axiosInstance.get<User>('/me');
+  }
 
-  googleAuth: () => {
-    console.log("Initiating Google OAuth");
-    window.location.href = `${import.meta.env.VITE_API_URL}${
-      API_ENDPOINTS.GOOGLE_AUTH
-    }`;
-  },
+  async verifyToken() {
+    return this.axiosInstance.get('/verify-token');
+  }
 
-  githubAuth: () => {
-    console.log("Initiating GitHub OAuth");
-    window.location.href = `${import.meta.env.VITE_API_URL}${
-      API_ENDPOINTS.GITHUB_AUTH
-    }`;
-  },
-};
+  async updateProfile(profileData: UserUpdate) {
+    return this.axiosInstance.put<User>('/profile', profileData);
+  }
+}
+
+export const authAPI = new AuthAPI();
