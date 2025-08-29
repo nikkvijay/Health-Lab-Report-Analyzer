@@ -196,12 +196,16 @@ class NotificationService {
 
   // Health Alert Notifications (Backend will handle persistent alerts)
   healthParameterAlert(parameter: string, value: string, status: 'high' | 'low' | 'critical', reportId: string) {
-    // Only show toast notification - backend creates persistent health alerts
-    const alertEmoji = status === 'critical' ? '🚨' : status === 'high' ? '📈' : '📉';
-    notify.warning(
-      `${alertEmoji} Health Alert: ${parameter}`,
-      `Level is ${status} (${value}) - Please consult your doctor`
-    );
+    // Always show critical alerts, check settings for others
+    const shouldShow = status === 'critical' || this.shouldShowNotification('health_alert');
+    
+    if (shouldShow) {
+      const alertEmoji = status === 'critical' ? '🚨' : status === 'high' ? '📈' : '📉';
+      notify.warning(
+        `${alertEmoji} Health Alert: ${parameter}`,
+        `Level is ${status} (${value}) - Please consult your doctor`
+      );
+    }
     return null; // Backend handles persistent notification
   }
 
@@ -598,6 +602,10 @@ class NotificationService {
   
   // Medication Reminders
   medicationReminder(medicationName: string, dosage: string, frequency: string) {
+    if (!this.shouldShowNotification('medication')) {
+      return null; // User has disabled medication reminders
+    }
+    
     const notification = this.addNotification({
       type: 'reminder',
       title: 'Medication Reminder',
@@ -682,6 +690,10 @@ class NotificationService {
 
   // Diet & Lifestyle Notifications
   hydrationReminder(dailyGoal: number, currentIntake: number) {
+    if (!this.shouldShowNotification('hydration')) {
+      return null; // User has disabled hydration reminders
+    }
+    
     const remaining = dailyGoal - currentIntake;
     if (remaining > 0) {
       const notification = this.addNotification({
@@ -926,17 +938,35 @@ class NotificationService {
       console.error('Error loading notification settings:', error);
     }
     
-    // Default settings (less aggressive)
+    // Default settings (much less aggressive)
     return {
+      // Core functionality (keep enabled)
       reportProcessing: true,
-      healthAlerts: true,
-      systemNotifications: false, // Disabled by default
-      reminders: false, // Disabled by default 
-      trends: false, // Disabled by default
-      appointments: true,
-      medications: true,
       criticalAlerts: true,
-      achievements: false // Disabled by default
+      
+      // Less essential features (disabled by default)
+      healthAlerts: false, // Only show critical, not minor alerts
+      systemNotifications: false, // No background system messages
+      reminders: false, // No recurring reminders
+      trends: false, // No trend analysis notifications
+      appointments: false, // No appointment reminders
+      medications: false, // No medication reminders
+      achievements: false, // No celebration notifications
+      hydration: false, // No hydration reminders
+      exercise: false, // No exercise reminders
+      seasonal: false, // No seasonal health reminders
+      educational: false, // No health tips
+      milestones: false, // No milestone celebrations
+      predictions: false, // No predictive alerts
+      
+      // Toast duration preferences (shorter durations)
+      toastDuration: {
+        success: 3000, // 3 seconds (down from 4)
+        error: 4000, // 4 seconds (down from 6)
+        warning: 3000, // 3 seconds (down from 5)
+        info: 2000, // 2 seconds (down from 4)
+        loading: 2000 // 2 seconds
+      }
     };
   }
 
@@ -959,9 +989,43 @@ class NotificationService {
   updateNotificationSettings(settings: any) {
     try {
       localStorage.setItem('hlra_notification_settings', JSON.stringify(settings));
+      console.log('✅ Updated notification settings:', settings);
     } catch (error) {
       console.error('Error saving notification settings:', error);
     }
+  }
+  
+  // Check if a notification type should be shown
+  private shouldShowNotification(type: string): boolean {
+    const settings = this.getNotificationSettings();
+    
+    // Always show critical alerts and report processing
+    if (type === 'critical' || type === 'report_processing') {
+      return true;
+    }
+    
+    // Check specific settings
+    switch (type) {
+      case 'health_alert': return settings.healthAlerts;
+      case 'reminder': return settings.reminders;
+      case 'system': return settings.systemNotifications;
+      case 'trend': return settings.trends;
+      case 'appointment': return settings.appointments;
+      case 'medication': return settings.medications;
+      case 'achievement': return settings.achievements;
+      case 'hydration': return settings.hydration;
+      case 'exercise': return settings.exercise;
+      case 'seasonal': return settings.seasonal;
+      case 'educational': return settings.educational;
+      case 'milestone': return settings.milestones;
+      case 'predictive': return settings.predictions;
+      default: return false; // Be conservative - disable unknown types
+    }
+  }
+  
+  // Get current settings for UI
+  getNotificationSettingsForUI() {
+    return this.getNotificationSettings();
   }
 
   // Sync with backend notifications

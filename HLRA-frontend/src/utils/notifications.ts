@@ -1,42 +1,71 @@
 import { toast } from 'sonner';
 
+// Get user notification preferences
+const getNotificationSettings = () => {
+  try {
+    const saved = localStorage.getItem('hlra_notification_settings');
+    if (saved) {
+      return JSON.parse(saved);
+    }
+  } catch (error) {
+    console.error('Error loading notification settings:', error);
+  }
+  
+  // Default durations (shorter than before)
+  return {
+    toastDuration: {
+      success: 3000,
+      error: 4000,
+      warning: 3000,
+      info: 2000,
+      loading: 2000
+    }
+  };
+};
+
 // Enhanced notification utility with consistent styling and behavior
 export const notify = {
   success: (message: string, description?: string) => {
+    const settings = getNotificationSettings();
     toast.success(message, {
       description,
-      duration: 4000,
+      duration: settings.toastDuration?.success || 3000,
       className: 'healthcare-toast-success',
     });
   },
 
   error: (message: string, description?: string) => {
+    const settings = getNotificationSettings();
     toast.error(message, {
       description,
-      duration: 6000, // Longer duration for errors
+      duration: settings.toastDuration?.error || 4000,
       className: 'healthcare-toast-error',
     });
   },
 
   warning: (message: string, description?: string) => {
+    const settings = getNotificationSettings();
     toast.warning(message, {
       description,
-      duration: 5000,
+      duration: settings.toastDuration?.warning || 3000,
       className: 'healthcare-toast-warning',
     });
   },
 
   info: (message: string, description?: string) => {
+    const settings = getNotificationSettings();
     toast.info(message, {
       description,
-      duration: 4000,
+      duration: settings.toastDuration?.info || 2000,
       className: 'healthcare-toast-info',
     });
   },
 
   loading: (message: string, description?: string) => {
+    const settings = getNotificationSettings();
     return toast.loading(message, {
       description,
+      duration: settings.toastDuration?.loading || 2000,
       className: 'healthcare-toast-loading',
     });
   },

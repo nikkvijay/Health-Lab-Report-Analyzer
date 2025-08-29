@@ -30,6 +30,7 @@ import { FamilyProfile, RelationshipType, getRelationshipDisplay, getRelationshi
 import { notify } from '../../utils/notifications';
 import { calculateAge, toLocalDateString, formatDisplayDate } from '../../utils/dateUtils';
 import { useAuth } from '../../contexts/AuthContext';
+import { useFamilyProfiles } from '../../contexts/FamilyProfileContext';
 
 interface ProfileSwitcherProps {
   className?: string;
@@ -51,8 +52,19 @@ interface ProfileFormData {
 
 const ProfileSwitcher: React.FC<ProfileSwitcherProps> = ({ className }) => {
   const { user, isAuthenticated } = useAuth();
+  
+  // Safely get context, handle case where provider might not be available
+  let contextLoading = false;
+  try {
+    const familyContext = useFamilyProfiles();
+    contextLoading = familyContext.loading;
+  } catch (error) {
+    console.warn('FamilyProfileProvider not available, using fallback approach');
+    // Fallback to direct service usage without context
+  }
   const [profiles, setProfiles] = useState<FamilyProfile[]>([]);
   const [activeProfile, setActiveProfile] = useState<FamilyProfile | null>(null);
+  const [localLoading, setLocalLoading] = useState(true);
   const [showAddDialog, setShowAddDialog] = useState(false);
   const [editingProfile, setEditingProfile] = useState<FamilyProfile | null>(null);
   const initialFormData: ProfileFormData = {
@@ -87,21 +99,46 @@ const ProfileSwitcher: React.FC<ProfileSwitcherProps> = ({ className }) => {
   const [switchTimeoutId, setSwitchTimeoutId] = useState<NodeJS.Timeout | null>(null);
 
   useEffect(() => {
-    // Only initialize if user is authenticated
-    if (!isAuthenticated || !user) {
+    // Only initialize if user is authenticated and context is not loading
+    if (!isAuthenticated || !user || contextLoading) {
+      setLocalLoading(false);
       return;
     }
+
+    setLocalLoading(true);
 
     // Subscribe to profile changes
     const unsubscribe = familyProfileService.subscribe((profileList, activeId) => {
       setProfiles(profileList);
       const active = profileList.find(p => p.id === activeId) || null;
       setActiveProfile(active);
+      setLocalLoading(false);
     });
 
-    // Initialize with current data
-    setProfiles(familyProfileService.getProfiles());
-    setActiveProfile(familyProfileService.getActiveProfile());
+    // Initialize with current data using async methods
+    const initializeData = async () => {
+      try {
+        // Wait for service to be initialized
+        if (!user?.id) return;
+        
+        // Ensure service is initialized first
+        await familyProfileService.initialize(user.id);
+        
+        const currentProfiles = await familyProfileService.getProfiles();
+        const currentActive = await familyProfileService.getActiveProfile();
+        setProfiles(currentProfiles);
+        setActiveProfile(currentActive);
+        setLocalLoading(false);
+      } catch (error) {
+        console.warn('Error initializing profile switcher data:', error);
+        setLocalLoading(false);
+      }
+    };
+    
+    // Only initialize if context loading is complete
+    if (!contextLoading) {
+      initializeData();
+    }
 
     return () => {
       unsubscribe();
@@ -110,7 +147,7 @@ const ProfileSwitcher: React.FC<ProfileSwitcherProps> = ({ className }) => {
         clearTimeout(switchTimeoutId);
       }
     };
-  }, [switchTimeoutId, isAuthenticated, user]);
+  }, [switchTimeoutId, isAuthenticated, user, contextLoading]);
 
   const handleSwitchProfile = (profileId: string) => {
     // Prevent rapid switching and race conditions
@@ -270,6 +307,22 @@ const ProfileSwitcher: React.FC<ProfileSwitcherProps> = ({ className }) => {
   };
 
   const activeProfileInfo = activeProfile ? getProfileDisplayInfo(activeProfile) : null;
+
+  // Show loading state while initializing
+  if (!isAuthenticated || localLoading) {
+    return (
+      <Button variant="ghost" className={`flex items-center gap-3 p-2 h-auto ${className}`} disabled>
+        <Avatar className="w-8 h-8">
+          <AvatarFallback className="text-sm">?</AvatarFallback>
+        </Avatar>
+        <div className="flex flex-col items-start text-left">
+          <span className="text-sm font-medium">Loading...</span>
+          <span className="text-xs text-slate-500">Initializing profiles</span>
+        </div>
+        <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-blue-500"></div>
+      </Button>
+    );
+  }
 
   return (
     <>

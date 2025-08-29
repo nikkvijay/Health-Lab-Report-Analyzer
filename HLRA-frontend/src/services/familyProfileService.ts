@@ -8,49 +8,190 @@ class FamilyProfileService {
   private activeProfileId: string | null = null;
   private subscribers: ((profiles: FamilyProfile[], activeId: string | null) => void)[] = [];
   private userId: string | null = null;
+  private isInitialized: boolean = false;
+  private initializationPromise: Promise<void> | null = null;
+  private persistenceCheckInterval: NodeJS.Timeout | null = null;
 
   constructor() {
-    this.loadProfiles();
+    // Don't load profiles here - wait for initialize() to be called with userId
   }
 
-  // Initialize service for a user
-  async initialize(userId: string) {
-    this.userId = userId;
+  // Initialize service for a user - idempotent and robust
+  async initialize(userId: string): Promise<void> {
+    // Prevent duplicate initialization
+    if (this.isInitialized && this.userId === userId) {
+      console.log('✅ Profile service already initialized for user:', userId);
+      return;
+    }
+    
+    // Return existing promise if initialization is in progress
+    if (this.initializationPromise && this.userId === userId) {
+      console.log('⏳ Profile service initialization in progress, waiting...');
+      return this.initializationPromise;
+    }
+    
+    // Create new initialization promise
+    this.initializationPromise = this._doInitialize(userId);
     
     try {
-  // Load profiles from backend first
+      await this.initializationPromise;
+    } finally {
+      this.initializationPromise = null;
+    }
+  }
+  
+  private async _doInitialize(userId: string): Promise<void> {
+    console.log('🔄 Initializing profile service for user:', userId);
+    
+    // Reset state for new user
+    if (this.userId !== userId) {
+      this.cleanup();
+      this.userId = userId;
+    }
+    
+    let profilesLoaded = false;
+    
+    try {
+      // Strategy 1: Try to load from backend first
+      console.log('📡 Attempting to load profiles from backend...');
       const backendProfiles = await familyProfileAPI.getProfiles();
       
       if (backendProfiles && backendProfiles.length > 0) {
+        console.log(`✅ Loaded ${backendProfiles.length} profiles from backend`);
         this.profiles = backendProfiles.map(profile => this.transformBackendProfile(profile));
-      } else {
-        this.loadProfiles(); // Fallback to localStorage
+        profilesLoaded = true;
+        
+        // Try to load active profile from backend
+        try {
+          const backendActiveProfile = await familyProfileAPI.getActiveProfile();
+          if (backendActiveProfile) {
+            this.activeProfileId = backendActiveProfile.id;
+            console.log(`✅ Set active profile from backend: ${backendActiveProfile.name}`);
+          }
+        } catch (error) {
+          console.warn('⚠️ Could not load active profile from backend:', error);
+        }
       }
-      
-      // Load active profile from backend
-      const backendActiveProfile = await familyProfileAPI.getActiveProfile();
-      if (backendActiveProfile) {
-        this.activeProfileId = backendActiveProfile.id;
-      } else if (this.profiles.length > 0) {
-        // Fallback to first profile if no active profile set
-        this.activeProfileId = this.profiles[0].id;
-      }
-      
     } catch (error) {
-      console.log('❌ Could not load profiles from backend, using localStorage:', error);
-      this.loadProfiles(); // Fallback to localStorage
+      console.warn('⚠️ Backend profile loading failed:', error);
     }
     
-    // Create default 'self' profile if none exists
-    if (this.profiles.length === 0) {
+    // Strategy 2: If backend failed, try localStorage
+    if (!profilesLoaded) {
+      console.log('💾 Attempting to load profiles from localStorage...');
+      this.loadProfiles();
+      profilesLoaded = this.profiles.length > 0;
+      
+      if (profilesLoaded) {
+        console.log(`✅ Loaded ${this.profiles.length} profiles from localStorage`);
+        // Try to sync with backend in background
+        this.syncWithBackendInBackground();
+      }
+    }
+    
+    // Strategy 3: If no profiles exist anywhere, create self profile
+    if (!profilesLoaded || this.profiles.length === 0) {
+      console.log('👤 No profiles found, creating self profile...');
       await this.createSelfProfile();
     } else {
-      // Save profiles to localStorage for offline access
+      // Ensure we have an active profile
+      if (!this.activeProfileId && this.profiles.length > 0) {
+        const selfProfile = this.profiles.find(p => p.relationship === 'self');
+        this.activeProfileId = selfProfile?.id || this.profiles[0].id;
+        console.log(`✅ Set default active profile: ${this.activeProfileId}`);
+      }
+      
+      // Save to localStorage for offline access with backup
       this.saveProfiles();
+      
+      // Verify persistence immediately
+      this.verifyPersistence();
     }
+    
+    this.isInitialized = true;
+    
+    // Start persistence monitoring
+    this.startPersistenceMonitoring();
+    
+    // Notify subscribers
+    this.notifySubscribers();
+    
+    console.log('🎉 Profile service initialization complete');
   }
 
-  // Subscribe to profile changes
+  // Background sync with backend (non-blocking)
+  private async syncWithBackendInBackground() {
+    try {
+      console.log('🔄 Starting background sync with backend...');
+      
+      // Try to sync profiles
+      const backendProfiles = await familyProfileAPI.getProfiles();
+      if (backendProfiles && backendProfiles.length > 0) {
+        const transformedProfiles = backendProfiles.map(profile => this.transformBackendProfile(profile));
+        
+        // Merge with local profiles (backend takes precedence)
+        this.profiles = transformedProfiles;
+        console.log(`✅ Background sync: updated with ${transformedProfiles.length} profiles from backend`);
+        
+        // Try to sync active profile
+        const backendActiveProfile = await familyProfileAPI.getActiveProfile();
+        if (backendActiveProfile) {
+          this.activeProfileId = backendActiveProfile.id;
+          console.log(`✅ Background sync: updated active profile`);
+        }
+        
+        // Save updated data and notify
+        this.saveProfiles();
+        this.notifySubscribers();
+      }
+    } catch (error) {
+      console.warn('⚠️ Background sync failed (non-critical):', error);
+    }
+  }
+  
+  // Ensure profiles are loaded - call this before any profile operations
+  async ensureProfilesLoaded(): Promise<void> {
+    if (!this.isInitialized || !this.userId) {
+      console.warn('⚠️ Profile service not initialized. Service state:', {
+        isInitialized: this.isInitialized,
+        hasUserId: !!this.userId,
+        profileCount: this.profiles.length
+      });
+      throw new Error('Profile service not initialized. Call initialize() first.');
+    }
+    
+    // If no profiles loaded, try to load them
+    if (this.profiles.length === 0) {
+      console.log('⚠️ No profiles loaded, attempting recovery...');
+      
+      // Try localStorage first
+      this.loadProfiles();
+      
+      // If still no profiles, try backend
+      if (this.profiles.length === 0) {
+        try {
+          const backendProfiles = await familyProfileAPI.getProfiles();
+          if (backendProfiles && backendProfiles.length > 0) {
+            this.profiles = backendProfiles.map(profile => this.transformBackendProfile(profile));
+            this.saveProfiles();
+            console.log('✅ Recovery: loaded profiles from backend');
+          }
+        } catch (error) {
+          console.warn('⚠️ Recovery failed, creating self profile:', error);
+          await this.createSelfProfile();
+        }
+      }
+      
+      // Ensure we have an active profile
+      if (!this.activeProfileId && this.profiles.length > 0) {
+        const selfProfile = this.profiles.find(p => p.relationship === 'self');
+        this.activeProfileId = selfProfile?.id || this.profiles[0].id;
+        this.saveProfiles();
+      }
+      
+      this.notifySubscribers();
+    }
+  }
   subscribe(callback: (profiles: FamilyProfile[], activeId: string | null) => void) {
     this.subscribers.push(callback);
     return () => {
@@ -70,13 +211,18 @@ class FamilyProfileService {
       
       if (backendProfiles && backendProfiles.length > 0) {
         this.profiles = backendProfiles.map(profile => this.transformBackendProfile(profile));
+        console.log(`✅ Refreshed ${this.profiles.length} profiles from backend`);
       }
       
       // Also refresh active profile
       const backendActiveProfile = await familyProfileAPI.getActiveProfile();
       if (backendActiveProfile) {
         this.activeProfileId = backendActiveProfile.id;
+        console.log(`✅ Set active profile to: ${backendActiveProfile.name} (${backendActiveProfile.id})`);
       }
+      
+      // Notify subscribers of the updated state
+      this.notifySubscribers();
       
     } catch (error) {
       console.error('❌ Failed to refresh profiles from backend:', error);
@@ -172,7 +318,37 @@ class FamilyProfileService {
   }
   private loadProfiles() {
     try {
-      const saved = localStorage.getItem(`hlra_family_profiles_${this.userId}`);
+      // Only attempt to load if userId is available
+      if (!this.userId) {
+        console.warn('Cannot load profiles: userId not set');
+        return;
+      }
+      
+      const primaryKey = `hlra_family_profiles_${this.userId}`;
+      const backupKey = `hlra_profiles_backup_${this.userId}`;
+      
+      // Try to load from primary location
+      let saved = localStorage.getItem(primaryKey);
+      let source = 'primary';
+      
+      // If primary fails, try backup
+      if (!saved) {
+        saved = localStorage.getItem(backupKey);
+        source = 'backup';
+      }
+      
+      // If both fail, try global backup for this user
+      if (!saved) {
+        const globalBackup = localStorage.getItem('hlra_profiles_last_backup');
+        if (globalBackup) {
+          const backup = JSON.parse(globalBackup);
+          if (backup.userId === this.userId && backup.data) {
+            saved = JSON.stringify(backup.data);
+            source = 'global backup';
+          }
+        }
+      }
+      
       if (saved) {
         const data: ProfileSwitchData = JSON.parse(saved);
         this.profiles = data.profiles.map(profile => ({
@@ -181,21 +357,161 @@ class FamilyProfileService {
           updatedAt: new Date(profile.updatedAt)
         }));
         this.activeProfileId = data.activeProfileId;
+        console.log(`✅ Loaded ${this.profiles.length} profiles from localStorage (${source}) for user ${this.userId}`);
+        
+        // If we loaded from backup, also save to primary for future use
+        if (source !== 'primary') {
+          console.log('🔄 Restoring primary storage from backup...');
+          this.saveProfiles();
+        }
       }
     } catch (error) {
       console.error('Error loading family profiles:', error);
+      
+      // Final fallback - try to recover any profiles for this user
+      this.attemptProfileRecovery();
     }
   }
 
-  // Save profiles to localStorage
+  // Emergency profile recovery method
+  private attemptProfileRecovery() {
+    try {
+      console.log('🆘 Attempting emergency profile recovery...');
+      
+      // Look for any profile-related data in localStorage
+      const recoveredProfiles: FamilyProfile[] = [];
+      
+      Object.keys(localStorage).forEach(key => {
+        if (key.includes('family_profiles') || key.includes('profiles_backup')) {
+          try {
+            const data = JSON.parse(localStorage.getItem(key) || '{}');
+            if (data.profiles && Array.isArray(data.profiles)) {
+              data.profiles.forEach((profile: any) => {
+                if (profile.userId === this.userId || !profile.userId) {
+                  // Convert dates
+                  const recoveredProfile = {
+                    ...profile,
+                    userId: this.userId, // Ensure correct user ID
+                    createdAt: new Date(profile.createdAt),
+                    updatedAt: new Date(profile.updatedAt)
+                  };
+                  recoveredProfiles.push(recoveredProfile);
+                }
+              });
+            }
+          } catch (e) {
+            // Skip invalid entries
+          }
+        }
+      });
+      
+      // Remove duplicates based on profile ID
+      const uniqueProfiles = recoveredProfiles.filter((profile, index, self) => 
+        self.findIndex(p => p.id === profile.id) === index
+      );
+      
+      if (uniqueProfiles.length > 0) {
+        this.profiles = uniqueProfiles;
+        // Set active profile to self if available, otherwise first profile
+        const selfProfile = this.profiles.find(p => p.relationship === 'self');
+        this.activeProfileId = selfProfile?.id || this.profiles[0].id;
+        
+        console.log(`✅ Recovery successful: restored ${uniqueProfiles.length} profiles`);
+        this.saveProfiles(); // Save the recovered data
+        return true;
+      }
+    } catch (error) {
+      console.error('Profile recovery failed:', error);
+    }
+    
+    return false;
+  }
+
+  // Verify that profiles are properly persisted
+  private verifyPersistence() {
+    try {
+      if (!this.userId) return false;
+      
+      const primaryKey = `hlra_family_profiles_${this.userId}`;
+      const saved = localStorage.getItem(primaryKey);
+      
+      if (!saved) {
+        console.warn('⚠️ Persistence verification failed - no data found, re-saving...');
+        this.saveProfiles();
+        return false;
+      }
+      
+      const data = JSON.parse(saved);
+      if (!data.profiles || data.profiles.length !== this.profiles.length) {
+        console.warn('⚠️ Persistence verification failed - data mismatch, re-saving...');
+        this.saveProfiles();
+        return false;
+      }
+      
+      console.log('✅ Persistence verification successful');
+      return true;
+    } catch (error) {
+      console.error('Persistence verification error:', error);
+      this.saveProfiles(); // Re-save on error
+      return false;
+    }
+  }
+
+  // Start monitoring persistence to prevent data loss
+  private startPersistenceMonitoring() {
+    // Check every 30 seconds
+    if (this.persistenceCheckInterval) {
+      clearInterval(this.persistenceCheckInterval);
+    }
+    
+    this.persistenceCheckInterval = setInterval(() => {
+      if (this.isInitialized && this.userId && this.profiles.length > 0) {
+        if (!this.verifyPersistence()) {
+          console.warn('🚨 Persistence check failed, attempting recovery...');
+          this.saveProfiles();
+        }
+      }
+    }, 30000); // Check every 30 seconds
+  }
+
+  // Stop persistence monitoring
+  private stopPersistenceMonitoring() {
+    if (this.persistenceCheckInterval) {
+      clearInterval(this.persistenceCheckInterval);
+      this.persistenceCheckInterval = null;
+    }
+  }
+
+  // Save profiles to localStorage with backup mechanism
   private saveProfiles() {
     try {
+      // Only attempt to save if userId is available
+      if (!this.userId) {
+        console.warn('Cannot save profiles: userId not set');
+        return;
+      }
+      
       const data: ProfileSwitchData = {
         profiles: this.profiles,
         activeProfileId: this.activeProfileId || '',
         lastSwitched: new Date()
       };
-      localStorage.setItem(`hlra_family_profiles_${this.userId}`, JSON.stringify(data));
+      
+      const primaryKey = `hlra_family_profiles_${this.userId}`;
+      const backupKey = `hlra_profiles_backup_${this.userId}`;
+      
+      // Save to both primary and backup locations
+      localStorage.setItem(primaryKey, JSON.stringify(data));
+      localStorage.setItem(backupKey, JSON.stringify(data));
+      
+      // Also save a global backup without user ID for recovery
+      localStorage.setItem('hlra_profiles_last_backup', JSON.stringify({
+        userId: this.userId,
+        data,
+        timestamp: Date.now()
+      }));
+      
+      console.log(`✅ Saved ${this.profiles.length} profiles to localStorage (with backup) for user ${this.userId}`);
       this.notifySubscribers();
     } catch (error) {
       console.error('Error saving family profiles:', error);
@@ -323,10 +639,10 @@ class FamilyProfileService {
       this.profiles.push(createdProfile);
       this.saveProfiles();
 
-      // Only notify with toast, no persistent notification
+      // Only notify with toast, no persistent notification - and make it shorter
       notify.success(
         'Profile Created',
-        `Added ${createdProfile.name} to your family profiles`
+        `${createdProfile.name} added`
       );
 
       return createdProfile;
@@ -409,19 +725,29 @@ class FamilyProfileService {
       throw new Error('Profile not found');
     }
 
+    const previousActiveId = this.activeProfileId;
+    
     try {
+      // Update local state first
+      this.activeProfileId = profileId;
+      
       // Call backend to persist active profile
       await familyProfileAPI.setActiveProfile(profileId);
       
       // Refresh profiles from backend to ensure sync
       await this.refreshProfilesFromBackend();
+      
+      // Save to localStorage
       this.saveProfiles();
 
-      // Only show toast notification, no persistent notification
-      notify.info('Profile Switched', `Now managing ${profile.name}'s health data`);
+      // Only show toast notification, no persistent notification - shorter message
+      notify.info('Switched to ' + profile.name);
 
       return profile;
     } catch (error) {
+      // Revert local state on error
+      this.activeProfileId = previousActiveId;
+      
       console.error('Failed to switch profile:', error);
       notify.error('Profile Switch Failed', 'Unable to switch profile. Please try again.');
       throw error;
@@ -429,12 +755,26 @@ class FamilyProfileService {
   }
 
   // Get all profiles
-  getProfiles(): FamilyProfile[] {
+  async getProfiles(): Promise<FamilyProfile[]> {
+    // If not initialized, return empty array to prevent errors
+    if (!this.isInitialized) {
+      console.warn('⚠️ getProfiles called before initialization, returning empty array');
+      return [];
+    }
+    
+    await this.ensureProfilesLoaded();
     return this.profiles;
   }
 
   // Get active profile
-  getActiveProfile(): FamilyProfile | null {
+  async getActiveProfile(): Promise<FamilyProfile | null> {
+    // If not initialized, return null to prevent errors
+    if (!this.isInitialized) {
+      console.warn('⚠️ getActiveProfile called before initialization, returning null');
+      return null;
+    }
+    
+    await this.ensureProfilesLoaded();
     if (!this.activeProfileId) return null;
     return this.profiles.find(p => p.id === this.activeProfileId) || null;
   }
@@ -457,16 +797,16 @@ class FamilyProfileService {
   }
 
   // Check if user has permission for current profile
-  hasPermission(permission: keyof FamilyProfile['permissions']): boolean {
-    const activeProfile = this.getActiveProfile();
+  async hasPermission(permission: keyof FamilyProfile['permissions']): Promise<boolean> {
+    const activeProfile = await this.getActiveProfile();
     if (!activeProfile) return false;
     
     return activeProfile.permissions[permission];
   }
 
   // Get health insights for active profile
-  getHealthInsights() {
-    const activeProfile = this.getActiveProfile();
+  async getHealthInsights() {
+    const activeProfile = await this.getActiveProfile();
     if (!activeProfile) return null;
 
     const insights = {
@@ -628,6 +968,10 @@ class FamilyProfileService {
     this.profiles = [];
     this.activeProfileId = null;
     this.subscribers = [];
+    this.userId = null;
+    this.isInitialized = false;
+    this.initializationPromise = null;
+    this.stopPersistenceMonitoring();
   }
 }
 

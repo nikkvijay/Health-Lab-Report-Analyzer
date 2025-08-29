@@ -6,6 +6,7 @@ import { HealthDataProvider } from "./contexts/HealthDataContext";
 import { AuthProvider } from "./contexts/AuthContext";
 import { ThemeProvider } from "./contexts/ThemeContext";
 import { NotificationProvider } from "./contexts/NotificationContext";
+import { FamilyProfileProvider } from "./contexts/FamilyProfileContext";
 import AppRouter from "./AppRouter";
 
 const queryClient = new QueryClient();
@@ -15,14 +16,16 @@ const App = () => (
     <ThemeProvider>
       <TooltipProvider>
         <AuthProvider>
-          <NotificationProvider>
-            <HealthDataProvider>
-              <BrowserRouter>
-                <Sonner />
-                <AppRouter />
-              </BrowserRouter>
-            </HealthDataProvider>
-          </NotificationProvider>
+          <FamilyProfileProvider>
+            <NotificationProvider>
+              <HealthDataProvider>
+                <BrowserRouter>
+                  <Sonner />
+                  <AppRouter />
+                </BrowserRouter>
+              </HealthDataProvider>
+            </NotificationProvider>
+          </FamilyProfileProvider>
         </AuthProvider>
       </TooltipProvider>
     </ThemeProvider>

@@ -235,14 +235,20 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
     Cookies.remove('access_token');
     Cookies.remove('refresh_token');
     
-    // Clear localStorage items that might interfere
+    // Clear localStorage items that might interfere - BUT PRESERVE PROFILE DATA
     try {
       localStorage.removeItem('hlra_notifications');
       localStorage.removeItem('form_persistence_new_profile');
       localStorage.removeItem('form_persistence_edit_profile');
-      // Clear any other auth-related items
+      
+      // Clear only specific auth-related items, NOT profile data
       Object.keys(localStorage).forEach(key => {
-        if (key.includes('auth') || key.includes('token') || key.includes('user')) {
+        // Only clear auth-specific keys, preserve profile data
+        if (
+          (key.includes('auth') || key.includes('token') || key.includes('session')) &&
+          !key.includes('family_profiles') && // Preserve family profile data
+          !key.includes('hlra_family_profiles') // Preserve family profile data
+        ) {
           localStorage.removeItem(key);
         }
       });
@@ -299,6 +305,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
             full_name: 'Development User',
             email: 'dev@example.com',
             is_active: true,
+            is_verified: true,
             created_at: new Date().toISOString(),
           },
           tokens: {

@@ -7,12 +7,12 @@ interface FamilyProfileContextType {
   profiles: FamilyProfile[];
   activeProfile: FamilyProfile | null;
   loading: boolean;
-  switchProfile: (profileId: string) => void;
-  createProfile: (profileData: any) => FamilyProfile;
+  switchProfile: (profileId: string) => Promise<FamilyProfile>;
+  createProfile: (profileData: any) => Promise<FamilyProfile>;
   updateProfile: (profileId: string, updates: any) => FamilyProfile;
   deleteProfile: (profileId: string) => void;
-  hasPermission: (permission: keyof FamilyProfile['permissions']) => boolean;
-  getHealthInsights: () => any;
+  hasPermission: (permission: keyof FamilyProfile['permissions']) => Promise<boolean>;
+  getHealthInsights: () => Promise<any>;
 }
 
 const FamilyProfileContext = createContext<FamilyProfileContextType | undefined>(undefined);
@@ -38,52 +38,46 @@ export const FamilyProfileProvider: React.FC<FamilyProfileProviderProps> = ({ ch
   useEffect(() => {
     if (isAuthenticated && user) {
       // Initialize the family profile service
-      familyProfileService.initialize(user.id);
-
-      // Subscribe to profile changes
-      const unsubscribe = familyProfileService.subscribe((profileList, activeId) => {
-        console.log('Profile subscription update:', { profileList, activeId });
-        setProfiles(profileList);
-        const active = profileList.find(p => p.id === activeId) || null;
-        setActiveProfile(active);
-        setLoading(false);
-      });
-
-      // Get initial data and ensure self profile exists
       const initializeProfiles = async () => {
         try {
-          // Initialize service with backend sync
+          setLoading(true);
+          
+          // Subscribe to profile changes BEFORE initialization
+          const unsubscribe = familyProfileService.subscribe((profileList, activeId) => {
+            console.log('Profile subscription update:', { profileList, activeId });
+            setProfiles(profileList);
+            const active = profileList.find(p => p.id === activeId) || null;
+            setActiveProfile(active);
+            setLoading(false);
+          });
+          
+          // Initialize service with backend sync - this will trigger subscriber notifications
           await familyProfileService.initialize(user.id);
           
-          let profiles = familyProfileService.getProfiles();
-          
-          // If no profiles exist, create self profile
-          if (profiles.length === 0) {
-            const selfProfile = await familyProfileService.createProfile({
-              name: user.full_name || user.email,
-              relationship: 'self',
-              relationshipLabel: 'Self',
-            });
-            profiles = [selfProfile];
+          // Get initial data using async methods
+          try {
+            const initialProfiles = await familyProfileService.getProfiles();
+            const initialActiveProfile = await familyProfileService.getActiveProfile();
+            setProfiles(initialProfiles);
+            setActiveProfile(initialActiveProfile);
+          } catch (error) {
+            console.warn('Error getting initial profile data:', error);
           }
           
-          setProfiles(profiles);
-          
-          // Set active profile (should be self profile by default)
-          const activeProfile = familyProfileService.getActiveProfile();
-          setActiveProfile(activeProfile);
-          
+          return unsubscribe;
         } catch (error) {
           console.error('Error initializing profiles:', error);
-        } finally {
           setLoading(false);
         }
       };
 
-      initializeProfiles();
+      let unsubscribePromise = initializeProfiles();
 
       return () => {
-        unsubscribe();
+        // Clean up subscription when component unmounts
+        unsubscribePromise.then(unsubscribe => {
+          if (unsubscribe) unsubscribe();
+        });
       };
     } else {
       // Reset when user logs out
@@ -110,12 +104,12 @@ export const FamilyProfileProvider: React.FC<FamilyProfileProviderProps> = ({ ch
     return familyProfileService.deleteProfile(profileId);
   };
 
-  const hasPermission = (permission: keyof FamilyProfile['permissions']) => {
-    return familyProfileService.hasPermission(permission);
+  const hasPermission = async (permission: keyof FamilyProfile['permissions']) => {
+    return await familyProfileService.hasPermission(permission);
   };
 
-  const getHealthInsights = () => {
-    return familyProfileService.getHealthInsights();
+  const getHealthInsights = async () => {
+    return await familyProfileService.getHealthInsights();
   };
 
   // Emit custom event when active profile changes
