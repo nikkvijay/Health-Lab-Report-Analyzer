@@ -23,6 +23,7 @@ class NotificationService {
 
   constructor() {
     this.loadNotifications();
+    this.removeDuplicates(); // Clean up any existing duplicates
     this.setupPeriodicChecks();
     
     // Sync with backend notifications periodically
@@ -30,6 +31,34 @@ class NotificationService {
     setInterval(() => {
       this.syncWithBackend();
     }, 5 * 60 * 1000); // Sync every 5 minutes
+  }
+
+  // Remove duplicate notifications
+  private removeDuplicates() {
+    const seen = new Set<string>();
+    const seenHashes = new Set<string>();
+    
+    this.notifications = this.notifications.filter(notification => {
+      // Check for duplicate IDs
+      if (seen.has(notification.id)) {
+        console.log('Removing duplicate notification by ID:', notification.id, notification.title);
+        return false;
+      }
+      
+      // Check for duplicate content (same hash)
+      const hash = this.createNotificationHash(notification);
+      if (seenHashes.has(hash)) {
+        console.log('Removing duplicate notification by content:', notification.title);
+        return false;
+      }
+      
+      seen.add(notification.id);
+      seenHashes.add(hash);
+      return true;
+    });
+    
+    // Sort by timestamp (newest first) after deduplication
+    this.notifications.sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime());
   }
 
   // Load notifications from localStorage
@@ -87,14 +116,24 @@ class NotificationService {
     );
 
     if (duplicateExists) {
+      console.log('Duplicate notification detected and blocked:', notification.title);
       return null;
     }
 
+    // Generate unique ID and check for ID conflicts
+    let newId: string;
+    let attempts = 0;
+    do {
+      newId = Date.now().toString() + Math.random().toString(36).substr(2, 9);
+      attempts++;
+    } while (this.notifications.some(n => n.id === newId) && attempts < 10);
+
     const newNotification: NotificationData = {
       ...notification,
-      id: Date.now().toString() + Math.random(),
+      id: newId,
       timestamp: new Date(),
       read: false,
+      data: { ...notification.data, source: 'local' } // Mark as locally generated
     };
 
     this.notifications.unshift(newNotification);
@@ -496,12 +535,48 @@ class NotificationService {
     this.notifySubscribers();
   }
 
+  // Public method to remove duplicates
+  cleanupDuplicates() {
+    const originalLength = this.notifications.length;
+    this.removeDuplicates();
+    const newLength = this.notifications.length;
+    
+    if (originalLength !== newLength) {
+      console.log(`Removed ${originalLength - newLength} duplicate notifications`);
+      this.saveNotifications();
+      this.notifySubscribers();
+    }
+    
+    return originalLength - newLength;
+  }
+
   getNotifications() {
     return this.notifications;
   }
 
   getUnreadCount() {
     return this.notifications.filter(n => !n.read).length;
+  }
+
+  // Get notification statistics
+  getNotificationStats() {
+    const stats = {
+      total: this.notifications.length,
+      unread: this.getUnreadCount(),
+      byType: {} as Record<string, number>,
+      bySource: {} as Record<string, number>
+    };
+    
+    this.notifications.forEach(n => {
+      // Count by type
+      stats.byType[n.type] = (stats.byType[n.type] || 0) + 1;
+      
+      // Count by source
+      const source = n.data?.source || 'unknown';
+      stats.bySource[source] = (stats.bySource[source] || 0) + 1;
+    });
+    
+    return stats;
   }
 
   // Setup periodic health checks
@@ -933,7 +1008,7 @@ class NotificationService {
             message: backendNotif.message || '',
             timestamp: backendNotif.created_at ? new Date(backendNotif.created_at) : new Date(),
             read: backendNotif.is_read ?? false,
-            data: backendNotif.data || {}
+            data: { ...backendNotif.data || {}, source: 'backend' } // Mark as backend source
           };
         } catch (notifError) {
           console.error('Error processing notification at index', index, ':', notifError, backendNotif);
@@ -941,12 +1016,23 @@ class NotificationService {
         }
       }).filter(notif => notif !== null); // Remove any null entries
 
-      // Merge with existing local notifications (keep local-only ones like upload progress)
+      // Keep existing local notifications (local-only ones and unique ones not from backend)
       const localOnlyNotifications = this.notifications.filter(n => 
-        n.type === 'system' && n.data?.local === true
+        (n.type === 'system' && n.data?.local === true) || // Local-only notifications
+        n.data?.source !== 'backend' // Locally generated notifications
       );
-
-      this.notifications = [...convertedNotifications, ...localOnlyNotifications];
+      
+      // Merge backend notifications with local ones, avoiding duplicates by ID
+      const existingIds = new Set([...localOnlyNotifications.map(n => n.id)]);
+      const uniqueBackendNotifications = convertedNotifications.filter(n => !existingIds.has(n.id));
+      
+      // Combine all notifications and sort by timestamp (newest first)
+      const allNotifications = [...uniqueBackendNotifications, ...localOnlyNotifications]
+        .sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime());
+      
+      // Keep only the latest 100 notifications
+      this.notifications = allNotifications.slice(0, 100);
+      
       this.saveNotifications();
       this.notifySubscribers();
       
