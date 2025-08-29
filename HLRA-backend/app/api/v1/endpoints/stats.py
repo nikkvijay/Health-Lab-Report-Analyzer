@@ -1,18 +1,21 @@
 # app/api/v1/endpoints/stats.py
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Depends
 from typing import List, Dict, Any
 from datetime import datetime, timedelta
 from app.services.data_service import data_service
+from app.models.user import User
+from app.core.auth import get_current_user
 import logging
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
 
 @router.get("/stats/dashboard")
-async def get_dashboard_stats():
-    """Get dashboard statistics"""
+async def get_dashboard_stats(current_user: User = Depends(get_current_user)):
+    """Get dashboard statistics for the current user"""
     try:
-        reports = await data_service.get_all_reports()
+        # Get reports for the current user only
+        reports = await data_service.get_reports_by_user_and_profile(user_id=current_user.id)
         if not reports:
             reports = []
         
@@ -35,7 +38,7 @@ async def get_dashboard_stats():
             if report.processing_status.value == "failed":
                 failed_reports += 1
         
-        logger.info(f"Dashboard stats: total={total_reports}, this_month={this_month_reports}, failed={failed_reports}")
+        logger.info(f"Dashboard stats for user {current_user.id}: total={total_reports}, this_month={this_month_reports}, failed={failed_reports}")
         
         return {
             "total_reports": total_reports,
@@ -46,7 +49,7 @@ async def get_dashboard_stats():
         }
         
     except Exception as e:
-        logger.error(f"Error getting dashboard stats: {e}")
+        logger.error(f"Error getting dashboard stats for user {current_user.id}: {e}")
         return {
             "total_reports": 0,
             "this_month": 0,
@@ -56,10 +59,10 @@ async def get_dashboard_stats():
         }
 
 @router.get("/stats/trends")
-async def get_trends_stats():
-    """Get trending statistics"""
+async def get_trends_stats(current_user: User = Depends(get_current_user)):
+    """Get trending statistics for the current user"""
     try:
-        reports = await data_service.get_all_reports()
+        reports = await data_service.get_reports_by_user_and_profile(user_id=current_user.id)
         if not reports:
             return {"trends": []}
         
@@ -85,14 +88,14 @@ async def get_trends_stats():
         return {"trends": trends}
         
     except Exception as e:
-        logger.error(f"Error getting trends stats: {e}")
+        logger.error(f"Error getting trends stats for user {current_user.id}: {e}")
         return {"trends": []}
 
 @router.get("/stats/parameters")
-async def get_parameter_stats():
-    """Get parameter statistics"""
+async def get_parameter_stats(current_user: User = Depends(get_current_user)):
+    """Get parameter statistics for the current user"""
     try:
-        reports = await data_service.get_all_reports()
+        reports = await data_service.get_reports_by_user_and_profile(user_id=current_user.id)
         if not reports:
             return {"parameters": []}
         
@@ -150,5 +153,5 @@ async def get_parameter_stats():
         return {"parameters": parameters}
         
     except Exception as e:
-        logger.error(f"Error getting parameter stats: {e}")
+        logger.error(f"Error getting parameter stats for user {current_user.id}: {e}")
         return {"parameters": []}

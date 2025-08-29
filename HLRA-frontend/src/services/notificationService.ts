@@ -893,18 +893,53 @@ class NotificationService {
   async syncWithBackend() {
     try {
       const { notificationAPI } = await import('../api/index');
-      const backendNotifications = await notificationAPI.getNotifications();
+      const backendNotifications: any = await notificationAPI.getNotifications();
       
-      // Convert backend notifications to frontend format
-      const convertedNotifications = backendNotifications.map((backendNotif: any) => ({
-        id: backendNotif.id,
-        type: this.mapBackendNotificationType(backendNotif.type),
-        title: backendNotif.title,
-        message: backendNotif.message,
-        timestamp: new Date(backendNotif.created_at),
-        read: backendNotif.is_read,
-        data: backendNotif.data || {}
-      }));
+      console.log('Backend notifications response:', backendNotifications);
+      
+      // Safely handle backend response - ensure it's an array
+      let notificationsArray = [];
+      if (Array.isArray(backendNotifications)) {
+        notificationsArray = backendNotifications;
+      } else if (backendNotifications && Array.isArray(backendNotifications.data)) {
+        notificationsArray = backendNotifications.data;
+      } else if (backendNotifications && Array.isArray(backendNotifications.notifications)) {
+        notificationsArray = backendNotifications.notifications;
+      } else if (backendNotifications && backendNotifications.items && Array.isArray(backendNotifications.items)) {
+        notificationsArray = backendNotifications.items;
+      } else {
+        console.warn('Backend notifications response is not an array:', backendNotifications);
+        notificationsArray = [];
+      }
+      
+      // Additional safety check - ensure notificationsArray is still an array
+      if (!Array.isArray(notificationsArray)) {
+        console.warn('notificationsArray is not an array after processing:', notificationsArray);
+        notificationsArray = [];
+      }
+      
+      // Convert backend notifications to frontend format with additional safety checks
+      const convertedNotifications = notificationsArray.map((backendNotif: any, index: number) => {
+        try {
+          if (!backendNotif || typeof backendNotif !== 'object') {
+            console.warn('Invalid notification object at index', index, ':', backendNotif);
+            return null;
+          }
+          
+          return {
+            id: backendNotif.id || `backend_${Date.now()}_${index}`,
+            type: this.mapBackendNotificationType(backendNotif.type || 'system'),
+            title: backendNotif.title || 'Notification',
+            message: backendNotif.message || '',
+            timestamp: backendNotif.created_at ? new Date(backendNotif.created_at) : new Date(),
+            read: backendNotif.is_read ?? false,
+            data: backendNotif.data || {}
+          };
+        } catch (notifError) {
+          console.error('Error processing notification at index', index, ':', notifError, backendNotif);
+          return null;
+        }
+      }).filter(notif => notif !== null); // Remove any null entries
 
       // Merge with existing local notifications (keep local-only ones like upload progress)
       const localOnlyNotifications = this.notifications.filter(n => 

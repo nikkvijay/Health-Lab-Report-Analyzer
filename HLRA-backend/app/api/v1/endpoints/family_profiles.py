@@ -26,6 +26,10 @@ async def create_family_profile(
 ):
     """Create a new family profile"""
     try:
+        # Validate required fields
+        if not profile_data.name or len(profile_data.name.strip()) == 0:
+            raise HTTPException(status_code=422, detail="Profile name is required")
+        
         profile = await family_profile_service.create_profile(
             user_id=current_user.id,
             profile_data=profile_data
@@ -33,9 +37,11 @@ async def create_family_profile(
         
         return FamilyProfileResponse(**profile.dict())
         
+    except HTTPException:
+        raise
     except Exception as e:
         logger.error(f"Error creating family profile: {e}")
-        raise HTTPException(status_code=500, detail="Failed to create family profile")
+        raise HTTPException(status_code=500, detail=f"Failed to create family profile: {str(e)}")
 
 @router.get("/family-profiles", response_model=FamilyProfileListResponse)
 async def get_family_profiles(current_user: User = Depends(get_current_user)):

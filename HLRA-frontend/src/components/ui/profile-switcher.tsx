@@ -159,12 +159,12 @@ const ProfileSwitcher: React.FC<ProfileSwitcherProps> = ({ className }) => {
       dateOfBirth: profile.dateOfBirth || '',
       gender: profile.gender || '',
       bloodType: profile.bloodType || '',
-      allergies: profile.healthInfo.allergies.join(', '),
-      medications: profile.healthInfo.medications.join(', '),
-      chronicConditions: profile.healthInfo.chronicConditions.join(', '),
-      emergencyContactName: profile.healthInfo.emergencyContact?.name || '',
-      emergencyContactPhone: profile.healthInfo.emergencyContact?.phone || '',
-      emergencyContactRelationship: profile.healthInfo.emergencyContact?.relationship || '',
+      allergies: profile.healthInfo?.allergies?.join(', ') || '',
+      medications: profile.healthInfo?.medications?.join(', ') || '',
+      chronicConditions: profile.healthInfo?.chronicConditions?.join(', ') || '',
+      emergencyContactName: profile.healthInfo?.emergencyContact?.name || '',
+      emergencyContactPhone: profile.healthInfo?.emergencyContact?.phone || '',
+      emergencyContactRelationship: profile.healthInfo?.emergencyContact?.relationship || '',
     });
     setEditingProfile(profile);
     setShowAddDialog(true);
@@ -179,12 +179,9 @@ const ProfileSwitcher: React.FC<ProfileSwitcherProps> = ({ className }) => {
     
     // Ensure the family profile service is initialized
     try {
-      if (!familyProfileService.isInitialized || !familyProfileService.isInitialized()) {
-        familyProfileService.initialize(user.id);
-      }
+      await familyProfileService.initialize(user.id);
     } catch (error) {
-      // If isInitialized method doesn't exist, just try to initialize
-      familyProfileService.initialize(user.id);
+      console.warn('Failed to initialize family profile service:', error);
     }
     
     if (!formData.name.trim()) {
@@ -194,6 +191,7 @@ const ProfileSwitcher: React.FC<ProfileSwitcherProps> = ({ className }) => {
 
     const profileData = {
       name: formData.name,
+      relationship: 'family' as const,
       relationshipLabel: formData.relationshipLabel,
       dateOfBirth: formData.dateOfBirth,
       gender: formData.gender as any,
@@ -333,7 +331,7 @@ const ProfileSwitcher: React.FC<ProfileSwitcherProps> = ({ className }) => {
                         )}
                       </div>
                       <p className="text-xs text-slate-500 truncate">{info.subtitle}</p>
-                      {profile.healthInfo.chronicConditions.length > 0 && (
+                      {profile.healthInfo?.chronicConditions?.length > 0 ? (
                         <div className="flex flex-wrap gap-1 mt-1">
                           {profile.healthInfo.chronicConditions.slice(0, 2).map((condition, idx) => (
                             <Badge key={idx} variant="outline" className="text-xs">
@@ -346,7 +344,7 @@ const ProfileSwitcher: React.FC<ProfileSwitcherProps> = ({ className }) => {
                             </Badge>
                           )}
                         </div>
-                      )}
+                      ) : null}
                     </div>
                     
                     {profile.relationship !== 'self' && (

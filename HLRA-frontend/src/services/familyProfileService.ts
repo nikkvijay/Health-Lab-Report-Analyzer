@@ -18,15 +18,11 @@ class FamilyProfileService {
     this.userId = userId;
     
     try {
-      // Load profiles from backend first
+  // Load profiles from backend first
       const backendProfiles = await familyProfileAPI.getProfiles();
       
       if (backendProfiles && backendProfiles.length > 0) {
-        this.profiles = backendProfiles.map(profile => ({
-          ...profile,
-          createdAt: new Date(profile.created_at || profile.createdAt),
-          updatedAt: new Date(profile.updated_at || profile.updatedAt)
-        }));
+        this.profiles = backendProfiles.map(profile => this.transformBackendProfile(profile));
       } else {
         this.loadProfiles(); // Fallback to localStorage
       }
@@ -73,11 +69,7 @@ class FamilyProfileService {
       const backendProfiles = await familyProfileAPI.getProfiles();
       
       if (backendProfiles && backendProfiles.length > 0) {
-        this.profiles = backendProfiles.map(profile => ({
-          ...profile,
-          createdAt: new Date(profile.created_at || profile.createdAt),
-          updatedAt: new Date(profile.updated_at || profile.updatedAt)
-        }));
+        this.profiles = backendProfiles.map(profile => this.transformBackendProfile(profile));
       }
       
       // Also refresh active profile
@@ -91,7 +83,93 @@ class FamilyProfileService {
     }
   }
 
-  // Load profiles from localStorage
+  // Transform backend profile data to frontend format
+  private transformBackendProfile(backendProfile: any): FamilyProfile {
+    return {
+      id: backendProfile.id,
+      userId: backendProfile.user_id,
+      name: backendProfile.name,
+      relationship: backendProfile.relationship,
+      relationshipLabel: backendProfile.relationship_label,
+      dateOfBirth: backendProfile.date_of_birth,
+      gender: backendProfile.gender,
+      bloodType: backendProfile.blood_type,
+      avatar: backendProfile.avatar,
+      isActive: backendProfile.is_active,
+      createdAt: new Date(backendProfile.created_at),
+      updatedAt: new Date(backendProfile.updated_at),
+      healthInfo: {
+        allergies: backendProfile.health_info?.allergies || [],
+        medications: backendProfile.health_info?.medications || [],
+        chronicConditions: backendProfile.health_info?.chronic_conditions || [],
+        emergencyContact: backendProfile.emergency_contacts?.[0] ? {
+          name: backendProfile.emergency_contacts[0].name,
+          phone: backendProfile.emergency_contacts[0].phone,
+          relationship: backendProfile.emergency_contacts[0].relationship
+        } : undefined
+      },
+      permissions: {
+        canViewReports: backendProfile.permissions?.can_view_reports ?? true,
+        canUploadReports: backendProfile.permissions?.can_upload_reports ?? false,
+        canShareReports: backendProfile.permissions?.can_share_reports ?? false,
+        canModifyProfile: backendProfile.permissions?.can_manage_settings ?? false,
+        canViewTrends: backendProfile.permissions?.can_view_reports ?? true
+      },
+      childSettings: backendProfile.child_settings ? {
+        parentalControls: backendProfile.child_settings.parental_controls,
+        restrictedSharing: backendProfile.child_settings.restricted_access,
+        educationalMode: true,
+        ageVerificationRequired: backendProfile.child_settings.age_verification
+      } : undefined
+    };
+  }
+
+  // Transform frontend profile data to backend format
+  private transformToBackendFormat(profileData: any): any {
+    // Clean up empty string values to avoid validation errors
+    const cleanValue = (value: any) => {
+      if (value === '' || value === null || value === undefined) {
+        return undefined;
+      }
+      return value;
+    };
+    
+    const transformed = {
+      name: profileData.name,
+      relationship_label: cleanValue(profileData.relationshipLabel),
+      date_of_birth: cleanValue(profileData.dateOfBirth),
+      gender: cleanValue(profileData.gender),
+      blood_type: cleanValue(profileData.bloodType),
+      phone: cleanValue(profileData.phone),
+      email: cleanValue(profileData.email),
+      address: cleanValue(profileData.address),
+      notes: cleanValue(profileData.notes),
+      health_info: {
+        chronic_conditions: profileData.healthInfo?.chronicConditions || [],
+        medications: profileData.healthInfo?.medications || [],
+        allergies: profileData.healthInfo?.allergies || [],
+        previous_surgeries: [],
+        family_history: {},
+        notes: null
+      },
+      emergency_contacts: profileData.healthInfo?.emergencyContact ? [{
+        name: profileData.healthInfo.emergencyContact.name,
+        phone: profileData.healthInfo.emergencyContact.phone,
+        relationship: profileData.healthInfo.emergencyContact.relationship,
+        email: null
+      }] : []
+    };
+    
+    // Remove undefined fields to avoid sending them to backend
+    const cleanedTransformed: Record<string, any> = {};
+    Object.keys(transformed).forEach(key => {
+      if (transformed[key as keyof typeof transformed] !== undefined) {
+        cleanedTransformed[key] = transformed[key as keyof typeof transformed];
+      }
+    });
+    
+    return cleanedTransformed;
+  }
   private loadProfiles() {
     try {
       const saved = localStorage.getItem(`hlra_family_profiles_${this.userId}`);
@@ -128,25 +206,25 @@ class FamilyProfileService {
   private async createSelfProfile() {
     if (!this.userId) return;
 
-    const selfProfile: FamilyProfile = {
-      id: this.generateId(),
-      userId: this.userId,
+    const selfProfileData = {
       name: 'My Profile',
-      relationship: 'self',
-      isActive: true,
-      createdAt: new Date(),
-      updatedAt: new Date(),
+      relationshipLabel: 'Self',
       healthInfo: {
         allergies: [],
         medications: [],
         chronicConditions: []
-      },
-      permissions: DEFAULT_PERMISSIONS.self
+      }
     };
 
     try {
+      // Transform to backend format
+      const backendData = this.transformToBackendFormat(selfProfileData);
+      
       // Create profile in backend first
-      await familyProfileAPI.createProfile(selfProfile);
+      const backendProfile = await familyProfileAPI.createProfile(backendData);
+      
+      // Transform response to frontend format
+      const selfProfile = this.transformBackendProfile(backendProfile);
       
       this.profiles.push(selfProfile);
       this.activeProfileId = selfProfile.id;
@@ -160,8 +238,25 @@ class FamilyProfileService {
     } catch (error) {
       console.error('Error creating self profile:', error);
       // Fall back to local-only profile if backend fails
-      this.profiles.push(selfProfile);
-      this.activeProfileId = selfProfile.id;
+      const fallbackProfile: FamilyProfile = {
+        id: this.generateId(),
+        userId: this.userId,
+        name: 'My Profile',
+        relationship: 'self',
+        relationshipLabel: 'Self',
+        isActive: true,
+        createdAt: new Date(),
+        updatedAt: new Date(),
+        healthInfo: {
+          allergies: [],
+          medications: [],
+          chronicConditions: []
+        },
+        permissions: DEFAULT_PERMISSIONS.self
+      };
+      
+      this.profiles.push(fallbackProfile);
+      this.activeProfileId = fallbackProfile.id;
       this.saveProfiles();
     }
   }
@@ -190,24 +285,13 @@ class FamilyProfileService {
     }
 
     // Auto-assign permissions based on relationship
-    let permissions = DEFAULT_PERMISSIONS.default;
+    let permissions = DEFAULT_PERMISSIONS.family; // Use family as default
     if (profileData.relationship in DEFAULT_PERMISSIONS) {
       permissions = DEFAULT_PERMISSIONS[profileData.relationship as keyof typeof DEFAULT_PERMISSIONS];
     }
 
-    // Add child-specific settings for minors
+    // Add child-specific settings for minors (if needed in the future)
     let childSettings = undefined;
-    if (profileData.relationship === 'child' && profileData.dateOfBirth) {
-      const age = this.calculateAge(profileData.dateOfBirth);
-      if (age < 18) {
-        childSettings = {
-          parentalControls: true,
-          restrictedSharing: true,
-          educationalMode: age < 12,
-          ageVerificationRequired: age >= 13
-        };
-      }
-    }
 
     const newProfile: FamilyProfile = {
       ...profileData,
@@ -221,26 +305,48 @@ class FamilyProfileService {
     };
 
     try {
-      // Create profile in backend first
-      const backendProfile = await familyProfileAPI.createProfile(newProfile);
+      // Transform frontend data to backend format
+      const backendProfileData = this.transformToBackendFormat({
+        ...profileData,
+        healthInfo: profileData.healthInfo || { allergies: [], medications: [], chronicConditions: [] }
+      });
       
-      // Refresh all profiles from backend to ensure we have the complete list
-      await this.refreshProfilesFromBackend();
+      console.log('Sending profile data to backend:', backendProfileData);
+      
+      // Create profile in backend first
+      const backendProfile = await familyProfileAPI.createProfile(backendProfileData);
+      
+      // Transform backend response to frontend format
+      const createdProfile = this.transformBackendProfile(backendProfile);
+      
+      // Add to local profiles
+      this.profiles.push(createdProfile);
       this.saveProfiles();
 
-      // Find the created profile in the refreshed list
-      const createdProfile = this.profiles.find(p => p.name === newProfile.name && p.relationship === newProfile.relationship);
-      
       // Only notify with toast, no persistent notification
       notify.success(
         'Profile Created',
-        `Added ${newProfile.name} to your family profiles`
+        `Added ${createdProfile.name} to your family profiles`
       );
 
-      return createdProfile || backendProfile;
-    } catch (error) {
+      return createdProfile;
+    } catch (error: any) {
       console.error('❌ Failed to create profile in backend:', error);
-      notify.error('Profile Creation Failed', 'Unable to save profile to server. Please try again.');
+      
+      // Log detailed error information for 422 errors
+      if (error.response?.status === 422) {
+        console.error('422 Validation Error Details:', {
+          data: error.response?.data,
+          status: error.response?.status,
+          headers: error.response?.headers
+        });
+        
+        const errorMessage = error.response?.data?.detail || 'Validation failed';
+        notify.error('Profile Creation Failed', `Validation error: ${errorMessage}`);
+      } else {
+        notify.error('Profile Creation Failed', 'Unable to save profile to server. Please try again.');
+      }
+      
       throw error;
     }
   }
@@ -293,12 +399,6 @@ class FamilyProfileService {
 
     this.saveProfiles();
 
-    notificationService.addNotification({
-      type: 'system',
-      title: 'Profile Deleted',
-      message: `${profile.name}'s profile has been removed from your family`
-    });
-
     notify.success('Profile Deleted', `${profile.name}'s profile has been removed`);
   }
 
@@ -349,11 +449,10 @@ class FamilyProfileService {
     return this.profiles.filter(p => p.relationship === relationship);
   }
 
-  // Get children profiles (for parental control)
+  // Get children profiles (for parental control) - based on age if date of birth is available
   getChildrenProfiles(): FamilyProfile[] {
     return this.profiles.filter(p => 
-      p.relationship === 'child' || 
-      (p.dateOfBirth && this.calculateAge(p.dateOfBirth) < 18)
+      p.dateOfBirth && this.calculateAge(p.dateOfBirth) < 18
     );
   }
 

@@ -37,14 +37,25 @@ class FamilyProfileService:
         try:
             collection = await self.get_profiles_collection()
             
-            # Create the profile - always set as "family" unless it's self
+            # Create the profile - determine relationship type based on context
             profile_dict = profile_data.dict(exclude_unset=True)
-            profile_dict['relationship'] = SystemRelationshipType.FAMILY
+            
+            # Only set as FAMILY if not explicitly creating a self profile
+            # The relationship_label can help identify self profiles
+            if profile_dict.get('relationship_label', '').lower() in ['self', 'me', 'myself'] or profile_dict.get('name', '').lower() in ['my profile', 'me']:
+                profile_dict['relationship'] = SystemRelationshipType.SELF
+            else:
+                profile_dict['relationship'] = SystemRelationshipType.FAMILY
             
             profile = FamilyProfile(
                 user_id=user_id,
                 **profile_dict
             )
+            
+            # Ensure health_info has default values if not provided
+            if not hasattr(profile, 'health_info') or profile.health_info is None:
+                from app.models.family_profile import HealthInformation
+                profile.health_info = HealthInformation()
             
             # Insert into database
             result = await collection.insert_one(profile.dict())
