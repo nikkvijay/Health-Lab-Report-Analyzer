@@ -9,6 +9,8 @@ import {
   HeartPulse,
   Brain,
   UserCheck,
+  MessageSquare,
+  Sparkles,
 } from "lucide-react";
 import { Button } from "../ui/button";
 import { Badge } from "../ui/badge";
@@ -70,6 +72,16 @@ const Sidebar: React.FC<SidebarProps> = ({ isOpen = true, onClose, isMobile = fa
       description: 'Track wellness trends',
       color: 'text-rose-600',
       bgColor: 'bg-rose-50',
+    },
+    {
+      id: 'chat',
+      label: 'AI Health Assistant',
+      href: '/chat',
+      icon: Brain,
+      description: 'Ask health questions',
+      badge: '🔥 New',
+      color: 'text-purple-600',
+      bgColor: 'bg-purple-50',
     },
   ];
 

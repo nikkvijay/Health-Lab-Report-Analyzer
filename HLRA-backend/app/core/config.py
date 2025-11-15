@@ -35,6 +35,9 @@ class Settings(BaseSettings):
       # Public App Configuration (for shared links)
       public_app_url: str = Field(default="", env="PUBLIC_APP_URL")
 
+      # Gemini AI Configuration
+      gemini_api_key: str = Field(default="", env="GEMINI_API_KEY")
+
       @property
       def allowed_origins(self) -> List[str]:
           """Parse CORS origins from environment variable"""

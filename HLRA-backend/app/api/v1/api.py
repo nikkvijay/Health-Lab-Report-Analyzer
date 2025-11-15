@@ -1,5 +1,5 @@
 from fastapi import APIRouter
-from app.api.v1.endpoints import upload, extraction, reports, stats, trends, auth, family_profiles, notifications, shared_reports
+from app.api.v1.endpoints import upload, extraction, reports, stats, trends, auth, family_profiles, notifications, shared_reports, chat
 
 api_router = APIRouter()
 
@@ -29,3 +29,6 @@ api_router.include_router(notifications.router, tags=["notifications"])
 
 # Shared reports routes
 api_router.include_router(shared_reports.router, prefix="/sharing", tags=["shared-reports"])
+
+# AI Chat routes
+api_router.include_router(chat.router, prefix="/chat", tags=["ai-chat"])

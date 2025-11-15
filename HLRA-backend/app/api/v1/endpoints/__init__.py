@@ -8,15 +8,17 @@ from . import auth
 from . import family_profiles
 from . import notifications
 from . import shared_reports
+from . import chat
 
 __all__ = [
     "upload",
-    "extraction", 
+    "extraction",
     "reports",
     "stats",
     "trends",
     "auth",
     "family_profiles",
     "notifications",
-    "shared_reports"
+    "shared_reports",
+    "chat"
 ]

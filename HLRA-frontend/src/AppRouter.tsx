@@ -6,6 +6,7 @@ import Reports from "./pages/Reports";
 import Results from "./pages/Results";
 import Trends from "./pages/Trends";
 import Settings from "./pages/Settings";
+import HealthChat from "./pages/HealthChat";
 import SharedReport from "./pages/SharedReport";
 import NotFound from "./pages/NotFoundPage";
 import LoginPage from "./components/auth/LoginPage";
@@ -51,6 +52,7 @@ const AppRouter = () => (
       <Route path="reports" element={<Reports />} />
       <Route path="results" element={<Results />} />
       <Route path="trends" element={<Trends />} />
+      <Route path="chat" element={<HealthChat />} />
       <Route path="settings" element={<Settings />} />
     </Route>
     

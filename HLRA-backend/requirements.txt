@@ -21,3 +21,5 @@ bcrypt
 python-jose[cryptography]
 passlib[bcrypt]
 gunicorn
+google-generativeai
+aiohttp
