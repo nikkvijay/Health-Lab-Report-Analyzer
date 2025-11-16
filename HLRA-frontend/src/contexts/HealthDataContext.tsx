@@ -1,6 +1,7 @@
 import { createContext, useContext, useState, ReactNode, useEffect } from "react";
 import type { LabReport, FileUploadState, FamilyProfile } from "../types/index";
 import { healthAPI } from "../api/index";
+import { useAuth } from "./AuthContext";
 
 interface Filters {
   search: string;
@@ -37,6 +38,7 @@ const initialFilters: Filters = {
 const HealthDataContext = createContext<HealthDataContextType | null>(null);
 
 export const HealthDataProvider = ({ children }: { children: ReactNode }) => {
+  const { isAuthenticated } = useAuth();
   const [reports, setReports] = useState<LabReport[]>([]);
   const [currentReport, setCurrentReport] = useState<LabReport | null>(null);
   const [uploadState, setUploadState] = useState<FileUploadState>(initialUploadState);
@@ -89,15 +91,16 @@ export const HealthDataProvider = ({ children }: { children: ReactNode }) => {
     };
   }, [activeProfileId]); // Add activeProfileId as dependency to avoid stale closure
 
-  // Refresh reports when active profile changes or on mount
+  // Refresh reports when active profile changes or authentication status changes
   useEffect(() => {
-    refreshReports();
-  }, [activeProfileId]);
-
-  // Initial load of reports
-  useEffect(() => {
-    refreshReports();
-  }, []); // Run once on mount
+    // Only fetch reports if user is authenticated
+    if (isAuthenticated) {
+      refreshReports();
+    } else {
+      // Clear reports when user is not authenticated
+      setReports([]);
+    }
+  }, [activeProfileId, isAuthenticated]);
 
   const value: HealthDataContextType = {
     reports,

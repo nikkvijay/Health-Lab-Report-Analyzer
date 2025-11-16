@@ -42,15 +42,27 @@ def get_password_hash(password: str) -> str:
     return pwd_context.hash(password)
 
 def verify_token(token: str) -> Optional[str]:
+    import logging
+    logger = logging.getLogger(__name__)
+
     try:
         payload = jwt.decode(
             token, settings.SECRET_KEY, algorithms=[ALGORITHM]
         )
         token_data = payload.get("sub")
         if token_data is None:
+            logger.warning("⚠️ Token decoded but 'sub' field is missing")
             return None
+        logger.info(f"✅ Token verified successfully for: {token_data}")
         return token_data
-    except (JWTError, ValidationError):
+    except jwt.ExpiredSignatureError:
+        logger.warning("⏰ Token has expired")
+        return None
+    except jwt.JWTError as e:
+        logger.error(f"🔐 JWT decode error: {str(e)}")
+        return None
+    except ValidationError as e:
+        logger.error(f"❌ Validation error: {str(e)}")
         return None
 
 def verify_refresh_token(token: str) -> Optional[str]:

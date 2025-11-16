@@ -3,7 +3,7 @@ import { toast } from 'sonner';
 // Get user notification preferences
 const getNotificationSettings = () => {
   try {
-    const saved = localStorage.getItem('hlra_notification_settings');
+    const saved = localStorage.getItem('diagnosticdeck_notification_settings');
     if (saved) {
       return JSON.parse(saved);
     }

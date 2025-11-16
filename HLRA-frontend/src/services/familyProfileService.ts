@@ -324,8 +324,8 @@ class FamilyProfileService {
         return;
       }
       
-      const primaryKey = `hlra_family_profiles_${this.userId}`;
-      const backupKey = `hlra_profiles_backup_${this.userId}`;
+      const primaryKey = `diagnosticdeck_family_profiles_${this.userId}`;
+      const backupKey = `diagnosticdeck_profiles_backup_${this.userId}`;
       
       // Try to load from primary location
       let saved = localStorage.getItem(primaryKey);
@@ -339,7 +339,7 @@ class FamilyProfileService {
       
       // If both fail, try global backup for this user
       if (!saved) {
-        const globalBackup = localStorage.getItem('hlra_profiles_last_backup');
+        const globalBackup = localStorage.getItem('diagnosticdeck_profiles_last_backup');
         if (globalBackup) {
           const backup = JSON.parse(globalBackup);
           if (backup.userId === this.userId && backup.data) {
@@ -432,7 +432,7 @@ class FamilyProfileService {
     try {
       if (!this.userId) return false;
       
-      const primaryKey = `hlra_family_profiles_${this.userId}`;
+      const primaryKey = `diagnosticdeck_family_profiles_${this.userId}`;
       const saved = localStorage.getItem(primaryKey);
       
       if (!saved) {
@@ -497,15 +497,15 @@ class FamilyProfileService {
         lastSwitched: new Date()
       };
       
-      const primaryKey = `hlra_family_profiles_${this.userId}`;
-      const backupKey = `hlra_profiles_backup_${this.userId}`;
-      
+      const primaryKey = `diagnosticdeck_family_profiles_${this.userId}`;
+      const backupKey = `diagnosticdeck_profiles_backup_${this.userId}`;
+
       // Save to both primary and backup locations
       localStorage.setItem(primaryKey, JSON.stringify(data));
       localStorage.setItem(backupKey, JSON.stringify(data));
-      
+
       // Also save a global backup without user ID for recovery
-      localStorage.setItem('hlra_profiles_last_backup', JSON.stringify({
+      localStorage.setItem('diagnosticdeck_profiles_last_backup', JSON.stringify({
         userId: this.userId,
         data,
         timestamp: Date.now()

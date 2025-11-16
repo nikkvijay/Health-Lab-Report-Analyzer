@@ -25,6 +25,9 @@ export const NotificationProvider: React.FC<NotificationProviderProps> = ({ chil
 
   useEffect(() => {
     if (isAuthenticated && user) {
+      // Start syncing with backend
+      notificationService.startBackendSync();
+
       // Setup monthly reminders for authenticated user
       notificationService.setupMonthlyReminders(user.id);
 

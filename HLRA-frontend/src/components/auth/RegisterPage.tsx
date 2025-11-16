@@ -72,7 +72,7 @@ const RegisterPage: React.FC = () => {
             <Activity className="h-8 w-8 text-white" />
           </div>
           <h1 className="text-medical-brand text-3xl font-bold mb-2 bg-gradient-to-r from-primary to-primary/80 bg-clip-text text-transparent">
-            Join HLRA
+            Join DiagnosticDeck
           </h1>
           <p className="text-medical-note">
             Create your secure health profile

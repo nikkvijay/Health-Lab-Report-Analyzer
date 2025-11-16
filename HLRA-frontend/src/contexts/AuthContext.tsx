@@ -237,17 +237,17 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
     
     // Clear localStorage items that might interfere - BUT PRESERVE PROFILE DATA
     try {
-      localStorage.removeItem('hlra_notifications');
+      localStorage.removeItem('diagnosticdeck_notifications');
       localStorage.removeItem('form_persistence_new_profile');
       localStorage.removeItem('form_persistence_edit_profile');
-      
+
       // Clear only specific auth-related items, NOT profile data
       Object.keys(localStorage).forEach(key => {
         // Only clear auth-specific keys, preserve profile data
         if (
           (key.includes('auth') || key.includes('token') || key.includes('session')) &&
           !key.includes('family_profiles') && // Preserve family profile data
-          !key.includes('hlra_family_profiles') // Preserve family profile data
+          !key.includes('diagnosticdeck_family_profiles') // Preserve family profile data
         ) {
           localStorage.removeItem(key);
         }

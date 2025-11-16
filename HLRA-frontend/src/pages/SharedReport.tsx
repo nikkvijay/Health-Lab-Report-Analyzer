@@ -317,10 +317,10 @@ const SharedReport: React.FC = () => {
         {/* Footer */}
         <div className="mt-8 text-center">
           <p className="text-sm text-slate-500">
-            This report was shared securely through HLRA Health Lab Report Analyzer
+            This report was shared securely through DiagnosticDeck
           </p>
           <p className="text-xs text-slate-400 mt-1">
-            Visit <a href={window.location.origin} className="text-blue-600 hover:underline">HLRA</a> to manage your own health reports
+            Visit <a href={window.location.origin} className="text-blue-600 hover:underline">DiagnosticDeck</a> to manage your own health reports
           </p>
         </div>
       </div>

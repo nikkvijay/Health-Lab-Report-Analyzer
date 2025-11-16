@@ -21,16 +21,36 @@ class NotificationService {
   private readonly RATE_LIMIT = 10; // Max 10 requests per minute per endpoint
   private readonly RATE_WINDOW = 60 * 1000; // 1 minute window
 
+  private syncInterval: NodeJS.Timeout | null = null;
+
   constructor() {
     this.loadNotifications();
     this.removeDuplicates(); // Clean up any existing duplicates
     this.setupPeriodicChecks();
-    
-    // Sync with backend notifications periodically
+
+    // Don't sync with backend automatically - wait for authentication
+    // Sync will be started by NotificationProvider when user is authenticated
+  }
+
+  // Start syncing with backend (called when user is authenticated)
+  startBackendSync() {
+    // Initial sync
     this.syncWithBackend();
-    setInterval(() => {
-      this.syncWithBackend();
-    }, 5 * 60 * 1000); // Sync every 5 minutes
+
+    // Sync every 5 minutes
+    if (!this.syncInterval) {
+      this.syncInterval = setInterval(() => {
+        this.syncWithBackend();
+      }, 5 * 60 * 1000);
+    }
+  }
+
+  // Stop syncing with backend (called when user logs out)
+  stopBackendSync() {
+    if (this.syncInterval) {
+      clearInterval(this.syncInterval);
+      this.syncInterval = null;
+    }
   }
 
   // Remove duplicate notifications
@@ -64,7 +84,7 @@ class NotificationService {
   // Load notifications from localStorage
   private loadNotifications() {
     try {
-      const saved = localStorage.getItem('hlra_notifications');
+      const saved = localStorage.getItem('diagnosticdeck_notifications');
       if (saved) {
         this.notifications = JSON.parse(saved);
       }
@@ -76,7 +96,7 @@ class NotificationService {
   // Save notifications to localStorage
   private saveNotifications() {
     try {
-      localStorage.setItem('hlra_notifications', JSON.stringify(this.notifications));
+      localStorage.setItem('diagnosticdeck_notifications', JSON.stringify(this.notifications));
     } catch (error) {
       console.error('Error saving notifications:', error);
     }
@@ -930,7 +950,7 @@ class NotificationService {
   // Notification Settings Management
   private getNotificationSettings() {
     try {
-      const saved = localStorage.getItem('hlra_notification_settings');
+      const saved = localStorage.getItem('diagnosticdeck_notification_settings');
       if (saved) {
         return JSON.parse(saved);
       }
@@ -988,7 +1008,7 @@ class NotificationService {
   // Public method to update notification settings
   updateNotificationSettings(settings: any) {
     try {
-      localStorage.setItem('hlra_notification_settings', JSON.stringify(settings));
+      localStorage.setItem('diagnosticdeck_notification_settings', JSON.stringify(settings));
       console.log('✅ Updated notification settings:', settings);
     } catch (error) {
       console.error('Error saving notification settings:', error);
@@ -1126,6 +1146,7 @@ class NotificationService {
   cleanup() {
     this.reminderIntervals.forEach(interval => clearInterval(interval));
     this.reminderIntervals = [];
+    this.stopBackendSync();
   }
 }
 

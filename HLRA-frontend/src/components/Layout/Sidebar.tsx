@@ -175,8 +175,8 @@ const Sidebar: React.FC<SidebarProps> = ({ isOpen = true, onClose, isMobile = fa
                 <Stethoscope className="h-5 w-5 sm:h-6 sm:w-6 text-white" />
               </div>
               <div className="min-w-0">
-                <h2 className="text-medical-brand text-lg sm:text-xl truncate">HLRA</h2>
-                <p className="text-xs text-muted-foreground font-medium hidden sm:block">Healthcare Lab Report Analysis</p>
+                <h2 className="text-medical-brand text-lg sm:text-xl truncate">DiagnosticDeck</h2>
+                <p className="text-xs text-muted-foreground font-medium hidden sm:block">Smart Health Reports</p>
               </div>
             </div>
             {isMobile && (

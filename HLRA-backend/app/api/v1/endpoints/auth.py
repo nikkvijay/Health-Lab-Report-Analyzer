@@ -30,6 +30,13 @@ async def register(
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail="Password must be at least 8 characters long for security."
             )
+
+        # BCrypt has a 72-byte limit, check password length in bytes
+        if len(user_create.password.encode('utf-8')) > 72:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Password is too long. Please use a password with fewer characters."
+            )
             
         if not re.search(r'[A-Z]', user_create.password):
             raise HTTPException(
